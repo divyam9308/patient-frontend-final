@@ -2,6 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import "../App.css";
 
+
 function Cuboid({ className }) {
   return (
     <div className={`cuboid ${className}`}>
@@ -14,7 +15,7 @@ function Cuboid({ className }) {
 
 function Navbar() {
   const navigate = useNavigate();
-  
+
   return (
     <nav className="navbar">
       <div className="navbar-logo">
@@ -37,6 +38,8 @@ function Navbar() {
 }
 
 function Hero() {
+  const navigate = useNavigate();
+
   return (
     <section className="hero">
       <div className="cuboids-scene" aria-hidden="true">
@@ -102,7 +105,15 @@ function Hero() {
 
         <div className="hero-right">
           <div className="cards-grid">
-            <div className="glass-card card-main">
+
+            {/* ✅ Clickable Priority System card */}
+            <div
+              className="glass-card card-main clickable-card"
+              onClick={() => navigate("/priority")}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === "Enter" && navigate("/priority")}
+            >
               <div className="card-icon-wrap green-icon">🩺</div>
               <h3 className="card-title">Priority System</h3>
               <p className="card-desc">
@@ -134,6 +145,7 @@ function Hero() {
               </div>
               <div className="verified-badge">✓ Verified</div>
             </div>
+
           </div>
         </div>
       </div>
