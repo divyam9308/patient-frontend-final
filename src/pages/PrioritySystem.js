@@ -131,10 +131,6 @@ export default function PrioritySystem() {
           <a href="/appointments" onClick={(e) => { e.preventDefault(); navigate("/appointments"); }}>Appointments</a>
           <a href="/records" onClick={(e) => { e.preventDefault(); navigate("/records"); }}>Records</a>
         </div>
-        <div className="ps-nav-actions">
-          <button className="ps-btn-outline" onClick={() => navigate("/login")}>Login</button>
-          <button className="ps-btn-solid" onClick={() => navigate("/register")}>Register</button>
-        </div>
       </nav>
 
       <div className="ps-content">
