@@ -1,4 +1,5 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import "../App.css";
 
 function Cuboid({ className }) {
@@ -12,6 +13,8 @@ function Cuboid({ className }) {
 }
 
 function Navbar() {
+  const navigate = useNavigate();
+  
   return (
     <nav className="navbar">
       <div className="navbar-logo">
@@ -26,8 +29,8 @@ function Navbar() {
         <span className="navbar-logo-text">HealthCare</span>
       </div>
       <div className="navbar-actions">
-        <button className="btn-outline">Login</button>
-        <button className="btn-primary">Register</button>
+        <button className="btn-outline" onClick={() => navigate("/login")}>Login</button>
+        <button className="btn-primary" onClick={() => navigate("/register")}>Register</button>
       </div>
     </nav>
   );
