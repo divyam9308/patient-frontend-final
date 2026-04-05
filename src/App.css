@@ -1,38 +1,185 @@
-.App {
-  text-align: center;
+/* General Styles */
+body {
+  margin: 0;
+  font-family: "Inter", sans-serif;
+  background-color: #f9fbf9;
+  color: #2e2e2e;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
+.homepage {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
+}
+
+/* Navbar */
+.navbar {
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  width: 100%;
+  padding: 1rem 3rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  z-index: 10;
+}
+
+.logo {
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #2e7d5b;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.nav-buttons button {
+  margin-left: 1rem;
+  padding: 0.5rem 1.2rem;
+  border-radius: 20px;
+  border: 2px solid #2e7d5b;
+  font-weight: 500;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.btn-outline {
+  background: white;
+  color: #2e7d5b;
+}
+
+.btn-filled {
+  background: #2e7d5b;
+  border: none;
   color: white;
 }
 
-.App-link {
-  color: #61dafb;
+.btn-outline:hover {
+  background: #2e7d5b;
+  color: white;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
+.btn-filled:hover {
+  background: #256748;
+}
+
+/* Hero Section */
+.hero {
+  text-align: center;
+  padding: 5rem 1rem 3rem 1rem;
+  max-width: 800px;
+}
+
+.hero h1 {
+  font-size: 2.5rem;
+  line-height: 1.3;
+}
+
+.highlight {
+  color: #2e7d5b;
+}
+
+.hero p {
+  max-width: 600px;
+  margin: 1rem auto 2rem;
+  color: #555;
+}
+
+.hero-btn {
+  padding: 0.8rem 1.8rem;
+  font-size: 1rem;
+  border-radius: 25px;
+}
+
+.hero-image {
+  margin-top: 3rem;
+  width: 100%;
+  border-radius: 20px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+}
+
+/* Features Section */
+.features {
+  text-align: center;
+  padding: 4rem 1rem;
+}
+
+.features h2 {
+  font-size: 1.8rem;
+}
+
+.features p {
+  color: #666;
+  margin-bottom: 3rem;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.5rem;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.feature-card {
+  background: #fff;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.5rem;
+  border-radius: 15px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-5px);
+}
+
+.feature-icon {
+  font-size: 1.8rem;
+  color: #2e7d5b;
+}
+
+/* CTA Section */
+.cta {
+  text-align: center;
+  background: #ffffff;
+  padding: 4rem 1rem;
+  border-radius: 20px;
+  margin: 4rem 1rem;
+  max-width: 700px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
+}
+
+.cta h2 {
+  font-size: 1.8rem;
+  margin-bottom: 1rem;
+}
+
+.cta p {
+  margin-bottom: 2rem;
+  color: #555;
+}
+
+/* Buttons General */
+button {
+  font-family: inherit;
+  border: none;
+}
+
+@media (max-width: 768px) {
+  .navbar {
+    padding: 1rem 1.5rem;
   }
-  to {
-    transform: rotate(360deg);
+
+  .hero h1 {
+    font-size: 2rem;
+  }
+
+  .features-grid {
+    grid-template-columns: 1fr;
   }
 }
