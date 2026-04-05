@@ -1,17 +1,22 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import "../App.css";
 
 function Home() {
+  const navigate = useNavigate();
+
   return (
     <div className="homepage">
       {/* Navbar */}
       <nav className="navbar">
-        <div className="logo">
-          <span className="logo-icon">💚</span> HealthCare
-        </div>
+        <div className="logo">💚 HealthCare</div>
         <div className="nav-buttons">
-          <button className="btn-outline">Login</button>
-          <button className="btn-filled">Register</button>
+          <button className="btn-outline" onClick={() => navigate("/login")}>
+            Login
+          </button>
+          <button className="btn-filled" onClick={() => navigate("/login")}>
+            Register
+          </button>
         </div>
       </nav>
 
@@ -25,17 +30,13 @@ function Home() {
           medicine verification. Healthcare made simple and safe.
         </p>
         <button className="btn-filled hero-btn">Get Started →</button>
-        <img
-          src="[images.unsplash.com](https://images.unsplash.com/photo-1584982751601-97dcc096659c?auto=format&fit=crop&w=900&q=80)"
-          alt="Healthcare abstract"
-          className="hero-image"
-        />
       </section>
 
       {/* Features Section */}
       <section className="features">
         <h2>Complete Healthcare Solution</h2>
         <p>Everything you need for better patient care</p>
+
         <div className="features-grid">
           <div className="feature-card">
             <span className="feature-icon">❤️</span>
@@ -47,6 +48,7 @@ function Home() {
               </p>
             </div>
           </div>
+
           <div className="feature-card">
             <span className="feature-icon">📋</span>
             <div>
@@ -56,6 +58,7 @@ function Home() {
               </p>
             </div>
           </div>
+
           <div className="feature-card">
             <span className="feature-icon">🛡️</span>
             <div>
@@ -65,6 +68,7 @@ function Home() {
               </p>
             </div>
           </div>
+
           <div className="feature-card">
             <span className="feature-icon">💊</span>
             <div>
@@ -80,9 +84,7 @@ function Home() {
       {/* CTA Section */}
       <section className="cta">
         <h2>Ready to get started?</h2>
-        <p>
-          Join thousands using our platform for better healthcare.
-        </p>
+        <p>Join thousands using our platform for better healthcare.</p>
         <button className="btn-filled">Create Account</button>
       </section>
     </div>
