@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./PrioritySystem.css";
 
-const SYMPTOMS = [
+const CORE_SYMPTOMS = [
   { id: 1, label: "Chest Pain", weight: 30 },
   { id: 2, label: "Difficulty Breathing", weight: 28 },
   { id: 3, label: "High Fever (>103°F)", weight: 20 },
@@ -16,6 +16,41 @@ const SYMPTOMS = [
   { id: 11, label: "Skin Rash", weight: 9 },
   { id: 12, label: "Sore Throat", weight: 5 },
 ];
+
+const EXTRA_SYMPTOMS = [
+  { id: 13, label: "Severe Swelling / Possible Fracture", weight: 26 },
+  { id: 14, label: "Numbness or Tingling", weight: 18 },
+  { id: 15, label: "Blurred or Double Vision", weight: 22 },
+  { id: 16, label: "Loss of Consciousness", weight: 35 },
+  { id: 17, label: "Difficulty Swallowing", weight: 20 },
+  { id: 18, label: "Severe Back Pain", weight: 19 },
+  { id: 19, label: "Abdominal Pain / Cramps", weight: 16 },
+  { id: 20, label: "Blood in Urine or Stool", weight: 28 },
+  { id: 21, label: "Sudden Weight Loss", weight: 15 },
+  { id: 22, label: "Excessive Sweating / Night Sweats", weight: 13 },
+  { id: 23, label: "Joint Pain / Stiffness", weight: 12 },
+  { id: 24, label: "Memory Loss / Confusion", weight: 24 },
+  { id: 25, label: "Ear Pain / Hearing Loss", weight: 11 },
+  { id: 26, label: "Frequent Urination", weight: 10 },
+  { id: 27, label: "Shortness of Breath at Rest", weight: 27 },
+  { id: 28, label: "Pale or Yellowing Skin (Jaundice)", weight: 23 },
+  { id: 29, label: "Swollen Lymph Nodes", weight: 14 },
+  { id: 30, label: "Muscle Weakness", weight: 17 },
+  { id: 31, label: "Irregular Heartbeat", weight: 26 },
+  { id: 32, label: "Anxiety / Panic Attack", weight: 13 },
+  { id: 33, label: "Severe Allergic Reaction", weight: 30 },
+  { id: 34, label: "Toothache / Jaw Pain", weight: 8 },
+  { id: 35, label: "Eye Redness / Discharge", weight: 9 },
+  { id: 36, label: "Bleeding that Won't Stop", weight: 32 },
+  { id: 37, label: "Seizures / Convulsions", weight: 35 },
+  { id: 38, label: "Sudden Severe Chest Tightness", weight: 33 },
+  { id: 39, label: "Cold / Clammy Skin", weight: 21 },
+  { id: 40, label: "Loss of Taste or Smell", weight: 10 },
+  { id: 41, label: "Painful Urination", weight: 12 },
+  { id: 42, label: "Neck Stiffness", weight: 20 },
+];
+
+const ALL_SYMPTOMS = [...CORE_SYMPTOMS, ...EXTRA_SYMPTOMS];
 
 const DURATION_OPTIONS = [
   "Less than 24 hours",
@@ -33,7 +68,7 @@ function getSeverityDetails(pct) {
       ring: "#e74c3c",
       icon: "🚨",
       appointmentMsg:
-        "Your condition is critical. An emergency appointment is being booked immediately.",
+        "Your condition is critical. Please proceed to book an emergency appointment immediately.",
       appointmentLabel: "Book Emergency Appointment",
       appointmentClass: "btn-critical",
       waitMsg: "Priority: Immediate",
@@ -74,12 +109,13 @@ export default function PrioritySystem() {
   const [analyzed, setAnalyzed] = useState(false);
   const [severity, setSeverity] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [booked, setBooked] = useState(false);
   const [animating, setAnimating] = useState(false);
+  const [showMore, setShowMore] = useState(false);
+
+  const visibleSymptoms = showMore ? ALL_SYMPTOMS : CORE_SYMPTOMS;
 
   const toggleSymptom = (id) => {
     setAnalyzed(false);
-    setBooked(false);
     setSelectedSymptoms((prev) =>
       prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
     );
@@ -92,7 +128,7 @@ export default function PrioritySystem() {
 
     setTimeout(() => {
       const baseScore = selectedSymptoms.reduce((acc, id) => {
-        const s = SYMPTOMS.find((s) => s.id === id);
+        const s = ALL_SYMPTOMS.find((s) => s.id === id);
         return acc + (s ? s.weight : 0);
       }, 0);
 
@@ -107,7 +143,7 @@ export default function PrioritySystem() {
 
       const ageBonus = age > 60 ? 10 : age < 12 ? 8 : 0;
       const raw = baseScore + durationBonus + ageBonus;
-      const pct = Math.min(98, Math.round((raw / 120) * 100));
+      const pct = Math.min(98, Math.round((raw / 150) * 100));
 
       setSeverity(pct);
       setLoading(false);
@@ -118,18 +154,32 @@ export default function PrioritySystem() {
 
   const details = getSeverityDetails(severity);
 
+  const handleBookAppointment = () => {
+    navigate("/appointment");
+  };
+
   return (
     <div className="ps-page">
-      {/* Nav */}
+      {/* Nav — only Home */}
       <nav className="ps-nav">
-        <div className="ps-logo" onClick={() => navigate("/")} style={{ cursor: "pointer" }}>
+        <div
+          className="ps-logo"
+          onClick={() => navigate("/")}
+          style={{ cursor: "pointer" }}
+        >
           <span className="ps-logo-icon">🫀</span>
           <span className="ps-logo-text">HealthCare</span>
         </div>
         <div className="ps-nav-links">
-          <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }}>Home</a>
-          <a href="/appointments" onClick={(e) => { e.preventDefault(); navigate("/appointments"); }}>Appointments</a>
-          <a href="/records" onClick={(e) => { e.preventDefault(); navigate("/records"); }}>Records</a>
+          <a
+            href="/"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate("/");
+            }}
+          >
+            Home
+          </a>
         </div>
       </nav>
 
@@ -168,7 +218,9 @@ export default function PrioritySystem() {
 
             {/* Duration */}
             <div className="ps-field">
-              <label className="ps-label">How long have you had symptoms?</label>
+              <label className="ps-label">
+                How long have you had symptoms?
+              </label>
               <div className="ps-duration-grid">
                 {DURATION_OPTIONS.map((opt) => (
                   <button
@@ -194,7 +246,7 @@ export default function PrioritySystem() {
                 <span className="ps-label-hint">(select all that apply)</span>
               </label>
               <div className="ps-symptoms-grid">
-                {SYMPTOMS.map((s) => (
+                {visibleSymptoms.map((s) => (
                   <button
                     key={s.id}
                     className={`ps-symptom-btn ${
@@ -209,6 +261,14 @@ export default function PrioritySystem() {
                   </button>
                 ))}
               </div>
+
+              {/* View More / View Less Toggle */}
+              <button
+                className="ps-view-more-btn"
+                onClick={() => setShowMore((prev) => !prev)}
+              >
+                {showMore ? "− View Less" : "+ View More Symptoms"}
+              </button>
             </div>
 
             <button
@@ -278,7 +338,9 @@ export default function PrioritySystem() {
               <>
                 {/* Severity Card */}
                 <div
-                  className={`ps-severity-card ${animating ? "ps-severity-visible" : ""}`}
+                  className={`ps-severity-card ${
+                    animating ? "ps-severity-visible" : ""
+                  }`}
                   style={{ background: details.bg }}
                 >
                   <div className="ps-severity-header">
@@ -303,23 +365,30 @@ export default function PrioritySystem() {
                       height="160"
                     >
                       <circle
-                        cx="60" cy="60" r="50"
+                        cx="60"
+                        cy="60"
+                        r="50"
                         fill="none"
                         stroke="#e8f5e9"
                         strokeWidth="10"
                       />
                       <circle
-                        cx="60" cy="60" r="50"
+                        cx="60"
+                        cy="60"
+                        r="50"
                         fill="none"
                         stroke={details.ring}
                         strokeWidth="10"
                         strokeLinecap="round"
-                        strokeDasharray={`${animating ? (severity / 100) * 314 : 0} 314`}
+                        strokeDasharray={`${
+                          animating ? (severity / 100) * 314 : 0
+                        } 314`}
                         strokeDashoffset="78.5"
                         style={{ transition: "stroke-dasharray 1.4s ease" }}
                       />
                       <text
-                        x="60" y="55"
+                        x="60"
+                        y="55"
                         textAnchor="middle"
                         fontSize="22"
                         fontWeight="700"
@@ -328,7 +397,8 @@ export default function PrioritySystem() {
                         {animating ? severity : 0}%
                       </text>
                       <text
-                        x="60" y="74"
+                        x="60"
+                        y="74"
                         textAnchor="middle"
                         fontSize="9"
                         fill="#888"
@@ -340,7 +410,10 @@ export default function PrioritySystem() {
 
                   <div
                     className="ps-wait-badge"
-                    style={{ color: details.color, border: `1.5px solid ${details.ring}` }}
+                    style={{
+                      color: details.color,
+                      border: `1.5px solid ${details.ring}`,
+                    }}
                   >
                     ⏱ {details.waitMsg}
                   </div>
@@ -350,7 +423,7 @@ export default function PrioritySystem() {
                     <div className="ps-summary-title">Symptoms Detected</div>
                     <div className="ps-tags">
                       {selectedSymptoms.map((id) => {
-                        const s = SYMPTOMS.find((s) => s.id === id);
+                        const s = ALL_SYMPTOMS.find((s) => s.id === id);
                         return (
                           <span
                             key={id}
@@ -371,31 +444,20 @@ export default function PrioritySystem() {
 
                 {/* Appointment Card */}
                 <div
-                  className={`ps-appt-card ${animating ? "ps-appt-visible" : ""}`}
+                  className={`ps-appt-card ${
+                    animating ? "ps-appt-visible" : ""
+                  }`}
                 >
                   <div className="ps-appt-icon">📅</div>
                   <h3 className="ps-appt-title">Appointment Recommendation</h3>
                   <p className="ps-appt-msg">{details.appointmentMsg}</p>
 
-                  {!booked ? (
-                    <button
-                      className={`ps-appt-btn ${details.appointmentClass}`}
-                      onClick={() => setBooked(true)}
-                    >
-                      {details.appointmentLabel}
-                    </button>
-                  ) : (
-                    <div className="ps-booked-confirm">
-                      <span className="ps-booked-check">✓</span>
-                      <div>
-                        <strong>Appointment Confirmed!</strong>
-                        <p>
-                          You will receive a confirmation on your registered
-                          number shortly.
-                        </p>
-                      </div>
-                    </div>
-                  )}
+                  <button
+                    className={`ps-appt-btn ${details.appointmentClass}`}
+                    onClick={handleBookAppointment}
+                  >
+                    {details.appointmentLabel}
+                  </button>
 
                   <div className="ps-disclaimer">
                     ⚕️ This is an AI-assisted triage. Always consult a qualified

@@ -183,3 +183,23 @@
 .ps-booked-confirm strong { display: block; font-size: 14px; color: var(--green-dark); margin-bottom: 3px; }
 .ps-booked-confirm p { font-size: 13px; color: var(--text-soft); }
 .ps-disclaimer { font-size: 12px; color: var(--text-soft); text-align: center; line-height: 1.6; padding-top: 8px; border-top: 1px solid var(--border); }
+/* VIEW MORE BUTTON */
+.ps-view-more-btn {
+  margin-top: 12px;
+  background: none;
+  border: 1.5px dashed var(--green-medium);
+  color: var(--green-primary);
+  padding: 8px 20px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: 'DM Sans', sans-serif;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.ps-view-more-btn:hover {
+  background: var(--green-pale);
+  border-style: solid;
+}
