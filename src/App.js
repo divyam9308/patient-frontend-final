@@ -4,20 +4,20 @@ import "./App.css";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
-import PrioritySystem from './pages/PrioritySystem';
-import Appointment from './pages/Appointment';
 import PrioritySystem from "./pages/PrioritySystem";
+import Appointment from "./pages/Appointment";
 import Dashboard from "./pages/Dashboard";
 
 function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/"          element={<Home />} />
-        <Route path="/login"     element={<Login />} />
-        <Route path="/register"  element={<Register />} />
-        <Route path="/priority"  element={<PrioritySystem />} />
-        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/"            element={<Home />} />
+        <Route path="/login"       element={<Login />} />
+        <Route path="/register"    element={<Register />} />
+        <Route path="/priority"    element={<PrioritySystem />} />
+        <Route path="/appointment" element={<Appointment />} />
+        <Route path="/dashboard"   element={<Dashboard />} />
       </Routes>
     </Router>
   );
