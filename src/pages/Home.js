@@ -109,10 +109,10 @@ function Hero() {
             {/* ✅ Clickable Priority System card */}
             <div
               className="glass-card card-main clickable-card"
-              onClick={() => navigate("/priority")}
+              onClick={() => navigate("/Login")}
               role="button"
               tabIndex={0}
-              onKeyDown={(e) => e.key === "Enter" && navigate("/priority")}
+              onKeyDown={(e) => e.key === "Enter" && navigate("/Login")}
             >
               <div className="card-icon-wrap green-icon">🩺</div>
               <h3 className="card-title">Priority System</h3>
