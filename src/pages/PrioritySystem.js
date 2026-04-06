@@ -3,18 +3,18 @@ import { useNavigate } from "react-router-dom";
 import "./PrioritySystem.css";
 
 const SYMPTOMS = [
-  { id: 1, label: "Chest Pain", weight: 30 },
-  { id: 2, label: "Difficulty Breathing", weight: 28 },
-  { id: 3, label: "High Fever (>103°F)", weight: 20 },
-  { id: 4, label: "Severe Headache", weight: 18 },
-  { id: 5, label: "Vomiting / Nausea", weight: 12 },
-  { id: 6, label: "Dizziness / Fainting", weight: 22 },
-  { id: 7, label: "Rapid Heart Rate", weight: 25 },
-  { id: 8, label: "Persistent Cough", weight: 10 },
-  { id: 9, label: "Body Ache / Fatigue", weight: 8 },
-  { id: 10, label: "Mild Fever (<100°F)", weight: 6 },
-  { id: 11, label: "Skin Rash", weight: 9 },
-  { id: 12, label: "Sore Throat", weight: 5 },
+  { id: 1,  label: "Chest Pain",            weight: 30 },
+  { id: 2,  label: "Difficulty Breathing",  weight: 28 },
+  { id: 3,  label: "High Fever (>103°F)",   weight: 20 },
+  { id: 4,  label: "Severe Headache",       weight: 18 },
+  { id: 5,  label: "Vomiting / Nausea",     weight: 12 },
+  { id: 6,  label: "Dizziness / Fainting",  weight: 22 },
+  { id: 7,  label: "Rapid Heart Rate",      weight: 25 },
+  { id: 8,  label: "Persistent Cough",      weight: 10 },
+  { id: 9,  label: "Body Ache / Fatigue",   weight: 8  },
+  { id: 10, label: "Mild Fever (<100°F)",   weight: 6  },
+  { id: 11, label: "Skin Rash",             weight: 9  },
+  { id: 12, label: "Sore Throat",           weight: 5  },
 ];
 
 const DURATION_OPTIONS = [
@@ -97,13 +97,10 @@ export default function PrioritySystem() {
       }, 0);
 
       const durationBonus =
-        duration === "More than a week"
-          ? 15
-          : duration === "4–7 days"
-          ? 10
-          : duration === "1–3 days"
-          ? 5
-          : 0;
+        duration === "More than a week" ? 15
+        : duration === "4–7 days"       ? 10
+        : duration === "1–3 days"       ? 5
+        : 0;
 
       const ageBonus = age > 60 ? 10 : age < 12 ? 8 : 0;
       const raw = baseScore + durationBonus + ageBonus;
@@ -122,14 +119,26 @@ export default function PrioritySystem() {
     <div className="ps-page">
       {/* Nav */}
       <nav className="ps-nav">
-        <div className="ps-logo" onClick={() => navigate("/")} style={{ cursor: "pointer" }}>
+        <div
+          className="ps-logo"
+          onClick={() => navigate("/dashboard")}
+          style={{ cursor: "pointer" }}
+        >
           <span className="ps-logo-icon">🫀</span>
           <span className="ps-logo-text">HealthCare</span>
         </div>
+
+        {/* Single Home link that goes back to dashboard */}
         <div className="ps-nav-links">
-          <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }}>Home</a>
-          <a href="/appointments" onClick={(e) => { e.preventDefault(); navigate("/appointments"); }}>Appointments</a>
-          <a href="/records" onClick={(e) => { e.preventDefault(); navigate("/records"); }}>Records</a>
+          <a
+            href="/Dashboard"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate("/Dashboard");
+            }}
+          >
+            ← Back to Dashboard
+          </a>
         </div>
       </nav>
 
@@ -173,9 +182,7 @@ export default function PrioritySystem() {
                 {DURATION_OPTIONS.map((opt) => (
                   <button
                     key={opt}
-                    className={`ps-duration-btn ${
-                      duration === opt ? "ps-duration-active" : ""
-                    }`}
+                    className={`ps-duration-btn ${duration === opt ? "ps-duration-active" : ""}`}
                     onClick={() => {
                       setDuration(opt);
                       setAnalyzed(false);
@@ -197,9 +204,7 @@ export default function PrioritySystem() {
                 {SYMPTOMS.map((s) => (
                   <button
                     key={s.id}
-                    className={`ps-symptom-btn ${
-                      selectedSymptoms.includes(s.id) ? "ps-symptom-active" : ""
-                    }`}
+                    className={`ps-symptom-btn ${selectedSymptoms.includes(s.id) ? "ps-symptom-active" : ""}`}
                     onClick={() => toggleSymptom(s.id)}
                   >
                     <span className="ps-symptom-check">
@@ -212,9 +217,7 @@ export default function PrioritySystem() {
             </div>
 
             <button
-              className={`ps-analyze-btn ${
-                selectedSymptoms.length === 0 || !duration ? "ps-disabled" : ""
-              }`}
+              className={`ps-analyze-btn ${selectedSymptoms.length === 0 || !duration ? "ps-disabled" : ""}`}
               onClick={analyzeSymptoms}
               disabled={selectedSymptoms.length === 0 || !duration || loading}
             >
@@ -302,12 +305,7 @@ export default function PrioritySystem() {
                       width="160"
                       height="160"
                     >
-                      <circle
-                        cx="60" cy="60" r="50"
-                        fill="none"
-                        stroke="#e8f5e9"
-                        strokeWidth="10"
-                      />
+                      <circle cx="60" cy="60" r="50" fill="none" stroke="#e8f5e9" strokeWidth="10" />
                       <circle
                         cx="60" cy="60" r="50"
                         fill="none"
@@ -318,21 +316,10 @@ export default function PrioritySystem() {
                         strokeDashoffset="78.5"
                         style={{ transition: "stroke-dasharray 1.4s ease" }}
                       />
-                      <text
-                        x="60" y="55"
-                        textAnchor="middle"
-                        fontSize="22"
-                        fontWeight="700"
-                        fill={details.color}
-                      >
+                      <text x="60" y="55" textAnchor="middle" fontSize="22" fontWeight="700" fill={details.color}>
                         {animating ? severity : 0}%
                       </text>
-                      <text
-                        x="60" y="74"
-                        textAnchor="middle"
-                        fontSize="9"
-                        fill="#888"
-                      >
+                      <text x="60" y="74" textAnchor="middle" fontSize="9" fill="#888">
                         Severity
                       </text>
                     </svg>
@@ -370,9 +357,7 @@ export default function PrioritySystem() {
                 </div>
 
                 {/* Appointment Card */}
-                <div
-                  className={`ps-appt-card ${animating ? "ps-appt-visible" : ""}`}
-                >
+                <div className={`ps-appt-card ${animating ? "ps-appt-visible" : ""}`}>
                   <div className="ps-appt-icon">📅</div>
                   <h3 className="ps-appt-title">Appointment Recommendation</h3>
                   <p className="ps-appt-msg">{details.appointmentMsg}</p>

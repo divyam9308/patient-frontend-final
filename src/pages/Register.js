@@ -1,7 +1,9 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "./Auth.css";
 
 export default function Register() {
+  const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({
     fullName: "", email: "", phone: "",
@@ -21,7 +23,10 @@ export default function Register() {
   const handleSubmit = (e) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => setLoading(false), 2000);
+    setTimeout(() => {
+      setLoading(false);
+      navigate("/Dashboard");
+    }, 1500);
   };
 
   const strength = (() => {
@@ -52,7 +57,10 @@ export default function Register() {
         <a href="/" className="auth-logo">
           <span className="logo-icon">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <path d="M10 17.5C10 17.5 2.5 13.125 2.5 7.5A4.375 4.375 0 0110 4.375 4.375 4.375 0 0117.5 7.5C17.5 13.125 10 17.5 10 17.5Z" fill="white"/>
+              <path
+                d="M10 17.5C10 17.5 2.5 13.125 2.5 7.5A4.375 4.375 0 0110 4.375 4.375 4.375 0 0117.5 7.5C17.5 13.125 10 17.5 10 17.5Z"
+                fill="white"
+              />
             </svg>
           </span>
           HealthCare
@@ -146,9 +154,20 @@ export default function Register() {
                   <label className="field-label">Full Name</label>
                   <div className="field-wrap">
                     <span className="field-icon">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                      </svg>
                     </span>
-                    <input type="text" name="fullName" placeholder="John Doe" value={form.fullName} onChange={handleChange} className="field-input" required />
+                    <input
+                      type="text"
+                      name="fullName"
+                      placeholder="John Doe"
+                      value={form.fullName}
+                      onChange={handleChange}
+                      className="field-input"
+                      required
+                    />
                   </div>
                 </div>
 
@@ -156,9 +175,20 @@ export default function Register() {
                   <label className="field-label">Email Address</label>
                   <div className="field-wrap">
                     <span className="field-icon">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                        <polyline points="22,6 12,13 2,6"/>
+                      </svg>
                     </span>
-                    <input type="email" name="email" placeholder="you@example.com" value={form.email} onChange={handleChange} className="field-input" required />
+                    <input
+                      type="email"
+                      name="email"
+                      placeholder="you@example.com"
+                      value={form.email}
+                      onChange={handleChange}
+                      className="field-input"
+                      required
+                    />
                   </div>
                 </div>
 
@@ -166,9 +196,18 @@ export default function Register() {
                   <label className="field-label">Phone Number</label>
                   <div className="field-wrap">
                     <span className="field-icon">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.68A2 2 0 012.18 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 8.15a16 16 0 006.94 6.94l1.51-1.52a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.68A2 2 0 012.18 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 8.15a16 16 0 006.94 6.94l1.51-1.52a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
+                      </svg>
                     </span>
-                    <input type="tel" name="phone" placeholder="+91 98765 43210" value={form.phone} onChange={handleChange} className="field-input" />
+                    <input
+                      type="tel"
+                      name="phone"
+                      placeholder="+91 98765 43210"
+                      value={form.phone}
+                      onChange={handleChange}
+                      className="field-input"
+                    />
                   </div>
                 </div>
 
@@ -182,25 +221,53 @@ export default function Register() {
                   <label className="field-label">Create Password</label>
                   <div className="field-wrap">
                     <span className="field-icon">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <path d="M7 11V7a5 5 0 0110 0v4"/>
+                      </svg>
                     </span>
-                    <input type={showPass ? "text" : "password"} name="password" placeholder="Create a strong password" value={form.password} onChange={handleChange} className="field-input" required />
-                    <button type="button" className="toggle-pass" onClick={() => setShowPass(!showPass)}>
+                    <input
+                      type={showPass ? "text" : "password"}
+                      name="password"
+                      placeholder="Create a strong password"
+                      value={form.password}
+                      onChange={handleChange}
+                      className="field-input"
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="toggle-pass"
+                      onClick={() => setShowPass(!showPass)}
+                    >
                       {showPass ? (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/>
+                          <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/>
+                          <line x1="1" y1="1" x2="23" y2="23"/>
+                        </svg>
                       ) : (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                          <circle cx="12" cy="12" r="3"/>
+                        </svg>
                       )}
                     </button>
                   </div>
                   {form.password && (
                     <div className="strength-bar">
                       <div className="strength-track">
-                        {[1,2,3,4].map(i => (
-                          <div key={i} className="strength-seg" style={{ background: i <= strength ? strengthColor : "#e2e8e4" }} />
+                        {[1, 2, 3, 4].map((i) => (
+                          <div
+                            key={i}
+                            className="strength-seg"
+                            style={{ background: i <= strength ? strengthColor : "#e2e8e4" }}
+                          />
                         ))}
                       </div>
-                      <span className="strength-text" style={{ color: strengthColor }}>{strengthLabel}</span>
+                      <span className="strength-text" style={{ color: strengthColor }}>
+                        {strengthLabel}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -209,11 +276,24 @@ export default function Register() {
                   <label className="field-label">Confirm Password</label>
                   <div className="field-wrap">
                     <span className="field-icon">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                      </svg>
                     </span>
-                    <input type="password" name="confirm" placeholder="Repeat your password" value={form.confirm} onChange={handleChange} className="field-input" required />
+                    <input
+                      type="password"
+                      name="confirm"
+                      placeholder="Repeat your password"
+                      value={form.confirm}
+                      onChange={handleChange}
+                      className="field-input"
+                      required
+                    />
                     {form.confirm && (
-                      <span className="match-icon" style={{ color: form.password === form.confirm ? "#16a34a" : "#ef4444" }}>
+                      <span
+                        className="match-icon"
+                        style={{ color: form.password === form.confirm ? "#16a34a" : "#ef4444" }}
+                      >
                         {form.password === form.confirm ? "✓" : "✗"}
                       </span>
                     )}
@@ -226,11 +306,23 @@ export default function Register() {
                   I agree to the <a href="/terms">Terms of Service</a> and <a href="/privacy">Privacy Policy</a>
                 </label>
 
-                <button type="submit" className={`btn-submit ${loading ? "loading" : ""}`} disabled={loading}>
-                  {loading ? <span className="spinner" /> : <>Create Account <span className="btn-arrow">→</span></>}
+                <button
+                  type="submit"
+                  className={`btn-submit ${loading ? "loading" : ""}`}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <span className="spinner" />
+                  ) : (
+                    <>Create Account <span className="btn-arrow">→</span></>
+                  )}
                 </button>
 
-                <button type="button" className="btn-back" onClick={() => setStep(1)}>
+                <button
+                  type="button"
+                  className="btn-back"
+                  onClick={() => setStep(1)}
+                >
                   ← Back
                 </button>
               </form>
