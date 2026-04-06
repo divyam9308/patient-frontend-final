@@ -4,6 +4,8 @@ import "./App.css";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import PrioritySystem from './pages/PrioritySystem';
+import Appointment from './pages/Appointment';
 import PrioritySystem from "./pages/PrioritySystem";
 import Dashboard from "./pages/Dashboard";
 
