@@ -1,0 +1,829 @@
+/* =============================================
+   Dashboard.css — HealthCare Patient Dashboard
+   Mint-green, clean, modern design system
+   ============================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --green-dark:    #1a5c40;
+  --green-cta:     #1f6b47;
+  --green-mid:     #2d7a56;
+  --green-light:   #e8f5ee;
+  --green-mist:    #f0f9f4;
+  --green-border:  #c8e6d4;
+  --green-pale:    #d1ead9;
+  --text-dark:     #0f2519;
+  --text-mid:      #3a5040;
+  --text-muted:    #7a9585;
+  --white:         #ffffff;
+  --red:           #ef4444;
+  --red-bg:        #fef2f2;
+  --amber:         #f59e0b;
+  --amber-bg:      #fffbeb;
+  --blue:          #3b82f6;
+  --blue-bg:       #eff6ff;
+  --sidebar-w:     260px;
+  --nav-h:         68px;
+  --radius:        16px;
+  --radius-sm:     10px;
+  --shadow:        0 4px 24px rgba(30, 100, 60, 0.09);
+  --shadow-md:     0 8px 40px rgba(30, 100, 60, 0.13);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+.db-root {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--green-mist);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  color: var(--text-dark);
+}
+
+/* ===================== TOP NAV ===================== */
+.db-topnav {
+  height: var(--nav-h);
+  background: var(--white);
+  border-bottom: 1px solid var(--green-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  box-shadow: 0 2px 12px rgba(30,100,60,0.06);
+}
+
+.db-nav-left { display: flex; align-items: center; gap: 14px; }
+
+.db-logo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.db-logo-icon {
+  width: 36px; height: 36px;
+  background: var(--green-cta);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+}
+.db-logo-text {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-dark);
+}
+
+.db-nav-divider {
+  width: 1px; height: 24px;
+  background: var(--green-border);
+}
+
+.db-nav-greeting {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.db-nav-greeting strong { color: var(--text-dark); font-weight: 600; }
+
+.db-nav-right { display: flex; align-items: center; gap: 14px; }
+
+.db-nav-icon-btn {
+  position: relative;
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  border: 1.5px solid var(--green-border);
+  background: var(--green-mist);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background 0.2s;
+}
+.db-nav-icon-btn:hover { background: var(--green-light); }
+
+.db-notif-dot {
+  position: absolute;
+  top: 6px; right: 6px;
+  width: 8px; height: 8px;
+  background: var(--red);
+  border-radius: 50%;
+  border: 2px solid white;
+}
+
+.db-nav-avatar {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  border: 2px solid var(--green-border);
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--green-light);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--green-dark);
+}
+.db-nav-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+/* ===================== BODY LAYOUT ===================== */
+.db-body {
+  display: flex;
+  flex: 1;
+  min-height: calc(100vh - var(--nav-h));
+}
+
+/* ===================== SIDEBAR ===================== */
+.db-sidebar {
+  width: var(--sidebar-w);
+  background: var(--white);
+  border-right: 1px solid var(--green-border);
+  display: flex;
+  flex-direction: column;
+  padding: 24px 16px;
+  gap: 6px;
+  position: sticky;
+  top: var(--nav-h);
+  height: calc(100vh - var(--nav-h));
+  overflow-y: auto;
+}
+
+.db-sidebar-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 10px 12px 6px;
+  margin-top: 8px;
+}
+
+.db-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-mid);
+  transition: all 0.18s;
+  position: relative;
+}
+.db-nav-item:hover {
+  background: var(--green-light);
+  color: var(--green-dark);
+}
+.db-nav-item.active {
+  background: var(--green-light);
+  color: var(--green-dark);
+  font-weight: 700;
+}
+.db-nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 20%; bottom: 20%;
+  width: 3px;
+  background: var(--green-cta);
+  border-radius: 0 3px 3px 0;
+}
+.db-nav-icon { font-size: 18px; width: 22px; text-align: center; }
+
+.db-nav-badge {
+  margin-left: auto;
+  background: var(--red);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 50px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.db-sidebar-footer {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--green-border);
+}
+
+.db-logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  width: 100%;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--red);
+  transition: background 0.18s;
+}
+.db-logout-btn:hover { background: var(--red-bg); }
+
+/* ===================== MAIN CONTENT ===================== */
+.db-main {
+  flex: 1;
+  padding: 32px 36px;
+  overflow-y: auto;
+  animation: fadeIn 0.4s ease both;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.db-page-title {
+  font-family: 'DM Serif Display', serif;
+  font-size: 1.9rem;
+  color: var(--text-dark);
+  font-weight: 400;
+  margin-bottom: 4px;
+}
+.db-page-subtitle {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  margin-bottom: 28px;
+}
+
+/* ===================== OVERVIEW TAB ===================== */
+/* Welcome banner */
+.db-welcome-banner {
+  background: linear-gradient(120deg, var(--green-cta), var(--green-mid));
+  border-radius: var(--radius);
+  padding: 28px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+  color: white;
+  box-shadow: 0 8px 32px rgba(31,107,71,0.3);
+  overflow: hidden;
+  position: relative;
+}
+.db-welcome-banner::after {
+  content: '🏥';
+  position: absolute;
+  right: 32px;
+  font-size: 80px;
+  opacity: 0.12;
+}
+.db-welcome-title {
+  font-family: 'DM Serif Display', serif;
+  font-size: 1.5rem;
+  font-weight: 400;
+  margin-bottom: 6px;
+}
+.db-welcome-sub { font-size: 13.5px; opacity: 0.85; }
+.db-welcome-btn {
+  background: white;
+  color: var(--green-cta);
+  border: none;
+  border-radius: 50px;
+  padding: 10px 22px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+.db-welcome-btn:hover { transform: translateY(-2px); }
+
+/* Quick stats */
+.db-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.db-stat-card {
+  background: var(--white);
+  border: 1px solid var(--green-border);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition: transform 0.2s;
+}
+.db-stat-card:hover { transform: translateY(-2px); }
+.db-stat-icon {
+  width: 46px; height: 46px;
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+.db-stat-num {
+  font-family: 'DM Serif Display', serif;
+  font-size: 1.5rem;
+  color: var(--text-dark);
+  line-height: 1;
+  margin-bottom: 2px;
+}
+.db-stat-label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+
+/* Two-col grid */
+.db-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+.db-three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+
+/* Cards */
+.db-card {
+  background: var(--white);
+  border: 1px solid var(--green-border);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+.db-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.db-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-dark);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.db-card-action {
+  font-size: 12px;
+  color: var(--green-mid);
+  font-weight: 600;
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-family: 'DM Sans', sans-serif;
+}
+.db-card-action:hover { text-decoration: underline; }
+
+/* Appointments list */
+.db-appt-list { display: flex; flex-direction: column; gap: 12px; }
+.db-appt-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  background: var(--green-mist);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--green-border);
+}
+.db-appt-date-box {
+  text-align: center;
+  min-width: 44px;
+  background: var(--green-cta);
+  color: white;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+.db-appt-date-day { font-size: 18px; font-weight: 700; line-height: 1; }
+.db-appt-date-mon { font-size: 10px; font-weight: 600; opacity: 0.85; text-transform: uppercase; }
+.db-appt-info { flex: 1; }
+.db-appt-doc { font-size: 13.5px; font-weight: 600; color: var(--text-dark); }
+.db-appt-dept { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+.db-appt-time {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--green-dark);
+  background: var(--green-pale);
+  padding: 3px 10px;
+  border-radius: 50px;
+}
+
+/* Medication list */
+.db-med-list { display: flex; flex-direction: column; gap: 10px; }
+.db-med-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--green-mist);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--green-border);
+}
+.db-med-icon {
+  width: 36px; height: 36px;
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  background: var(--green-light);
+  flex-shrink: 0;
+}
+.db-med-name { font-size: 13.5px; font-weight: 600; color: var(--text-dark); }
+.db-med-dose { font-size: 12px; color: var(--text-muted); }
+.db-med-freq {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--green-dark);
+  background: var(--green-pale);
+  padding: 3px 9px;
+  border-radius: 50px;
+}
+
+/* Vitals */
+.db-vitals-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.db-vital-item {
+  background: var(--green-mist);
+  border: 1px solid var(--green-border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+.db-vital-label { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.db-vital-val { font-family: 'DM Serif Display', serif; font-size: 1.25rem; color: var(--text-dark); }
+.db-vital-unit { font-size: 11px; color: var(--text-muted); font-family: 'DM Sans', sans-serif; }
+.db-vital-status {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 50px;
+  margin-top: 4px;
+}
+.status-normal { background: #d1fae5; color: #065f46; }
+.status-watch  { background: #fef3c7; color: #92400e; }
+.status-alert  { background: #fee2e2; color: #991b1b; }
+
+/* ===================== PROFILE TAB ===================== */
+.db-profile-top {
+  background: linear-gradient(120deg, var(--green-cta), var(--green-mid));
+  border-radius: var(--radius);
+  padding: 36px;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  margin-bottom: 24px;
+  color: white;
+  box-shadow: 0 8px 32px rgba(31,107,71,0.28);
+  position: relative;
+  overflow: hidden;
+}
+.db-profile-top::after {
+  content: '';
+  position: absolute;
+  right: -60px; top: -60px;
+  width: 260px; height: 260px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+}
+.db-profile-avatar-wrap { position: relative; }
+.db-profile-avatar {
+  width: 100px; height: 100px;
+  border-radius: 50%;
+  border: 4px solid rgba(255,255,255,0.5);
+  background: var(--green-light);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 38px;
+  font-weight: 700;
+  color: var(--green-dark);
+  overflow: hidden;
+}
+.db-profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.db-profile-verified {
+  position: absolute;
+  bottom: 4px; right: 4px;
+  width: 24px; height: 24px;
+  background: #22c55e;
+  border-radius: 50%;
+  border: 2px solid white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+  color: white;
+  font-weight: 700;
+}
+.db-profile-name {
+  font-family: 'DM Serif Display', serif;
+  font-size: 1.8rem;
+  font-weight: 400;
+  margin-bottom: 4px;
+}
+.db-profile-email { font-size: 13.5px; opacity: 0.85; margin-bottom: 12px; }
+.db-profile-tags { display: flex; gap: 8px; flex-wrap: wrap; }
+.db-profile-tag {
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 50px;
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Aadhar card */
+.db-aadhar-card {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  border-radius: var(--radius);
+  padding: 24px 28px;
+  color: white;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+.db-aadhar-card::before {
+  content: '';
+  position: absolute;
+  top: -40px; right: -40px;
+  width: 180px; height: 180px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.04);
+}
+.db-aadhar-card::after {
+  content: '';
+  position: absolute;
+  bottom: -50px; left: -30px;
+  width: 140px; height: 140px;
+  border-radius: 50%;
+  background: rgba(255,165,0,0.06);
+}
+.db-aadhar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.db-aadhar-gov { font-size: 11px; opacity: 0.7; font-weight: 600; letter-spacing: 0.5px; }
+.db-aadhar-emblem { font-size: 28px; }
+.db-aadhar-body { display: flex; gap: 20px; align-items: flex-start; }
+.db-aadhar-photo {
+  width: 72px; height: 88px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.12);
+  border: 2px solid rgba(255,255,255,0.25);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.db-aadhar-photo img { width: 100%; height: 100%; object-fit: cover; }
+.db-aadhar-info { flex: 1; }
+.db-aadhar-name { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.db-aadhar-dob { font-size: 12px; opacity: 0.7; margin-bottom: 10px; }
+.db-aadhar-number {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: #fbbf24;
+  font-family: monospace;
+  margin-bottom: 8px;
+}
+.db-aadhar-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+}
+.db-aadhar-barcode { font-size: 24px; }
+.db-aadhar-uidai { font-size: 10px; opacity: 0.6; }
+
+/* Info grid */
+.db-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.db-info-item { display: flex; flex-direction: column; gap: 4px; }
+.db-info-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.db-info-value { font-size: 14px; font-weight: 500; color: var(--text-dark); }
+
+/* Edit btn */
+.db-edit-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 20px;
+  border: 1.5px solid var(--green-border);
+  border-radius: 50px;
+  background: white;
+  color: var(--text-mid);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.db-edit-btn:hover { background: var(--green-light); border-color: var(--green-mid); color: var(--green-dark); }
+
+/* ===================== APPOINTMENTS TAB ===================== */
+.db-appt-full-list { display: flex; flex-direction: column; gap: 14px; }
+.db-appt-full-item {
+  background: var(--white);
+  border: 1px solid var(--green-border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  box-shadow: var(--shadow);
+  transition: transform 0.2s;
+}
+.db-appt-full-item:hover { transform: translateY(-2px); }
+.db-appt-full-datebox {
+  text-align: center;
+  min-width: 56px;
+  background: var(--green-cta);
+  color: white;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.db-appt-full-day { font-size: 22px; font-weight: 700; line-height: 1; }
+.db-appt-full-mon { font-size: 11px; font-weight: 600; opacity: 0.85; text-transform: uppercase; }
+.db-appt-full-info { flex: 1; }
+.db-appt-full-doc { font-size: 15px; font-weight: 700; color: var(--text-dark); margin-bottom: 3px; }
+.db-appt-full-dept { font-size: 13px; color: var(--text-muted); }
+.db-appt-status {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 14px;
+  border-radius: 50px;
+}
+.appt-upcoming  { background: var(--green-pale); color: var(--green-dark); }
+.appt-completed { background: var(--blue-bg); color: var(--blue); }
+.appt-cancelled { background: var(--red-bg); color: var(--red); }
+
+.db-new-appt-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: var(--green-cta);
+  color: white;
+  border: none;
+  border-radius: 50px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(31,107,71,0.3);
+  transition: all 0.2s;
+  margin-bottom: 20px;
+}
+.db-new-appt-btn:hover { background: var(--green-dark); transform: translateY(-2px); }
+
+/* ===================== MEDICAL RECORDS TAB ===================== */
+.db-records-list { display: flex; flex-direction: column; gap: 12px; }
+.db-record-item {
+  background: var(--white);
+  border: 1px solid var(--green-border);
+  border-radius: var(--radius);
+  padding: 18px 22px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: var(--shadow);
+  transition: transform 0.2s;
+}
+.db-record-item:hover { transform: translateY(-2px); }
+.db-record-icon {
+  width: 48px; height: 48px;
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+.db-record-info { flex: 1; }
+.db-record-name { font-size: 14.5px; font-weight: 700; color: var(--text-dark); margin-bottom: 3px; }
+.db-record-meta { font-size: 12px; color: var(--text-muted); }
+.db-record-size {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.db-record-dl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border: 1.5px solid var(--green-border);
+  border-radius: 50px;
+  background: var(--green-mist);
+  color: var(--green-dark);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.db-record-dl:hover { background: var(--green-light); border-color: var(--green-mid); }
+
+/* ===================== MEDICINE TAB ===================== */
+.db-scan-area {
+  border: 2px dashed var(--green-border);
+  border-radius: var(--radius);
+  padding: 48px;
+  text-align: center;
+  background: rgba(255,255,255,0.6);
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 24px;
+}
+.db-scan-area:hover { background: var(--green-light); border-color: var(--green-mid); }
+.db-scan-icon { font-size: 48px; margin-bottom: 12px; }
+.db-scan-title { font-size: 16px; font-weight: 700; color: var(--text-dark); margin-bottom: 6px; }
+.db-scan-sub { font-size: 13px; color: var(--text-muted); }
+
+.db-med-full-list { display: flex; flex-direction: column; gap: 14px; }
+.db-med-full-item {
+  background: var(--white);
+  border: 1px solid var(--green-border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: var(--shadow);
+}
+.db-med-full-icon {
+  width: 52px; height: 52px;
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px;
+  flex-shrink: 0;
+}
+.db-med-full-info { flex: 1; }
+.db-med-full-name { font-size: 15px; font-weight: 700; color: var(--text-dark); margin-bottom: 3px; }
+.db-med-full-sub { font-size: 12.5px; color: var(--text-muted); margin-bottom: 6px; }
+.db-med-tags { display: flex; gap: 7px; flex-wrap: wrap; }
+.db-med-tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 50px;
+  background: var(--green-pale);
+  color: var(--green-dark);
+}
+.db-verified-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #065f46;
+  background: #d1fae5;
+  padding: 5px 14px;
+  border-radius: 50px;
+}
+
+/* ===================== TREATMENTS TAB ===================== */
+.db-treatment-list { display: flex; flex-direction: column; gap: 16px; }
+.db-treatment-item {
+  background: var(--white);
+  border: 1px solid var(--green-border);
+  border-radius: var(--radius);
+  padding: 22px 26px;
+  box-shadow: var(--shadow);
+}
+.db-treatment-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.db-treatment-name { font-size: 15.5px; font-weight: 700; color: var(--text-dark); margin-bottom: 3px; }
+.db-treatment-doc { font-size: 12.5px; color: var(--text-muted); }
+.db-treatment-status {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 50px;
+}
+.t-ongoing    { background: var(--green-pale); color: var(--green-dark); }
+.t-completed  { background: var(--blue-bg);   color: var(--blue); }
+.db-treatment-progress { margin-top: 8px; }
+.db-progress-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; font-weight: 500; }
+.db-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--green-light);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.db-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--green-cta), var(--green-mid));
+  border-radius: 3px;
+  transition: width 1s ease;
+}
+
+/* ===================== RESPONSIVE ===================== */
+@media (max-width: 900px) {
+  .db-sidebar { display: none; }
+  .db-main { padding: 20px 16px; }
+  .db-stats-row { grid-template-columns: 1fr 1fr; }
+  .db-two-col, .db-three-col { grid-template-columns: 1fr; }
+  .db-info-grid { grid-template-columns: 1fr; }
+}

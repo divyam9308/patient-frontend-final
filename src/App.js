@@ -6,16 +6,18 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import PrioritySystem from './pages/PrioritySystem';
 import Appointment from './pages/Appointment';
+import PrioritySystem from "./pages/PrioritySystem";
+import Dashboard from "./pages/Dashboard";
 
 function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/priority" element={<PrioritySystem />} />
-        <Route path="/" element={<Home />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/appointment" element={<Appointment />} />
+        <Route path="/"          element={<Home />} />
+        <Route path="/login"     element={<Login />} />
+        <Route path="/register"  element={<Register />} />
+        <Route path="/priority"  element={<PrioritySystem />} />
+        <Route path="/dashboard" element={<Dashboard />} />
       </Routes>
     </Router>
   );

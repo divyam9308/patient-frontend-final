@@ -133,13 +133,10 @@ export default function PrioritySystem() {
       }, 0);
 
       const durationBonus =
-        duration === "More than a week"
-          ? 15
-          : duration === "4–7 days"
-          ? 10
-          : duration === "1–3 days"
-          ? 5
-          : 0;
+        duration === "More than a week" ? 15
+        : duration === "4–7 days"       ? 10
+        : duration === "1–3 days"       ? 5
+        : 0;
 
       const ageBonus = age > 60 ? 10 : age < 12 ? 8 : 0;
       const raw = baseScore + durationBonus + ageBonus;
@@ -164,21 +161,23 @@ export default function PrioritySystem() {
       <nav className="ps-nav">
         <div
           className="ps-logo"
-          onClick={() => navigate("/")}
+          onClick={() => navigate("/dashboard")}
           style={{ cursor: "pointer" }}
         >
           <span className="ps-logo-icon">🫀</span>
           <span className="ps-logo-text">HealthCare</span>
         </div>
+
+        {/* Single Home link that goes back to dashboard */}
         <div className="ps-nav-links">
           <a
-            href="/"
+            href="/Dashboard"
             onClick={(e) => {
               e.preventDefault();
-              navigate("/");
+              navigate("/Dashboard");
             }}
           >
-            Home
+            ← Back to Dashboard
           </a>
         </div>
       </nav>
@@ -225,9 +224,7 @@ export default function PrioritySystem() {
                 {DURATION_OPTIONS.map((opt) => (
                   <button
                     key={opt}
-                    className={`ps-duration-btn ${
-                      duration === opt ? "ps-duration-active" : ""
-                    }`}
+                    className={`ps-duration-btn ${duration === opt ? "ps-duration-active" : ""}`}
                     onClick={() => {
                       setDuration(opt);
                       setAnalyzed(false);
@@ -249,9 +246,7 @@ export default function PrioritySystem() {
                 {visibleSymptoms.map((s) => (
                   <button
                     key={s.id}
-                    className={`ps-symptom-btn ${
-                      selectedSymptoms.includes(s.id) ? "ps-symptom-active" : ""
-                    }`}
+                    className={`ps-symptom-btn ${selectedSymptoms.includes(s.id) ? "ps-symptom-active" : ""}`}
                     onClick={() => toggleSymptom(s.id)}
                   >
                     <span className="ps-symptom-check">
@@ -272,9 +267,7 @@ export default function PrioritySystem() {
             </div>
 
             <button
-              className={`ps-analyze-btn ${
-                selectedSymptoms.length === 0 || !duration ? "ps-disabled" : ""
-              }`}
+              className={`ps-analyze-btn ${selectedSymptoms.length === 0 || !duration ? "ps-disabled" : ""}`}
               onClick={analyzeSymptoms}
               disabled={selectedSymptoms.length === 0 || !duration || loading}
             >
@@ -443,11 +436,7 @@ export default function PrioritySystem() {
                 </div>
 
                 {/* Appointment Card */}
-                <div
-                  className={`ps-appt-card ${
-                    animating ? "ps-appt-visible" : ""
-                  }`}
-                >
+                <div className={`ps-appt-card ${animating ? "ps-appt-visible" : ""}`}>
                   <div className="ps-appt-icon">📅</div>
                   <h3 className="ps-appt-title">Appointment Recommendation</h3>
                   <p className="ps-appt-msg">{details.appointmentMsg}</p>
