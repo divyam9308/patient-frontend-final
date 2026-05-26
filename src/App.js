@@ -7,20 +7,26 @@ import Register from "./pages/Register";
 import PrioritySystem from "./pages/PrioritySystem";
 import Appointment from "./pages/Appointment";
 import Dashboard from "./pages/Dashboard";
+import Treatments from "./pages/Treatments";
+import MedicineVerification from "./pages/MedicineVerification";
 
 function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/"            element={<Home />} />
-        <Route path="/login"       element={<Login />} />
-        <Route path="/register"    element={<Register />} />
-        <Route path="/priority"    element={<PrioritySystem />} />
-        <Route path="/appointment" element={<Appointment />} />
-        <Route path="/dashboard"   element={<Dashboard />} />
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/priority-system" element={<PrioritySystem />} />
+        <Route path="/symptom-analyser" element={<PrioritySystem />} />
+        <Route path="/appointments" element={<Appointment />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/treatments" element={<Treatments />} />
+        <Route path="/medicines" element={<MedicineVerification />} />
       </Routes>
     </Router>
   );
 }
 
 export default App;
+

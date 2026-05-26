@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import DashboardLayout from "../components/DashboardLayout";
+import './Dashboard.css';
 import "./PrioritySystem.css";
 
 const CORE_SYMPTOMS = [
@@ -134,9 +136,9 @@ export default function PrioritySystem() {
 
       const durationBonus =
         duration === "More than a week" ? 15
-        : duration === "4–7 days"       ? 10
-        : duration === "1–3 days"       ? 5
-        : 0;
+          : duration === "4–7 days" ? 10
+            : duration === "1–3 days" ? 5
+              : 0;
 
       const ageBonus = age > 60 ? 10 : age < 12 ? 8 : 0;
       const raw = baseScore + durationBonus + ageBonus;
@@ -152,48 +154,16 @@ export default function PrioritySystem() {
   const details = getSeverityDetails(severity);
 
   const handleBookAppointment = () => {
-    navigate("/appointment");
+    navigate("/appointments");
   };
 
   return (
-    <div className="ps-page">
-      {/* Nav — only Home */}
-      <nav className="ps-nav">
-        <div
-          className="ps-logo"
-          onClick={() => navigate("/dashboard")}
-          style={{ cursor: "pointer" }}
-        >
-          <span className="ps-logo-icon">🫀</span>
-          <span className="ps-logo-text">HealthCare</span>
-        </div>
-
-        {/* Single Home link that goes back to dashboard */}
-        <div className="ps-nav-links">
-          <a
-            href="/Dashboard"
-            onClick={(e) => {
-              e.preventDefault();
-              navigate("/Dashboard");
-            }}
-          >
-            ← Back to Dashboard
-          </a>
-        </div>
-      </nav>
-
-      <div className="ps-content">
-        {/* Header */}
-        <div className="ps-header">
-          <div className="ps-badge">🩺 AI-Powered Triage</div>
-          <h1 className="ps-title">
-            Symptom Severity <span className="ps-title-accent">Analyzer</span>
-          </h1>
-          <p className="ps-subtitle">
-            Select your symptoms below. Our system analyses your inputs along
-            with your medical history to calculate a precise severity score and
-            prioritize your appointment accordingly.
-          </p>
+    <DashboardLayout activeTab="symptom">
+      <div className="ps-content" style={{ padding: "0 0 80px 0", maxWidth: "1200px", margin: "0 auto" }}>
+        {/* Page heading */}
+        <div className="db-page-title" style={{ textAlign: "left" }}>Symptom Analyser</div>
+        <div className="db-page-subtitle" style={{ textAlign: "left", marginBottom: 28 }}>
+          AI-powered triage: check your symptoms, get severity score, and prioritize your visit.
         </div>
 
         <div className="ps-grid">
@@ -313,7 +283,7 @@ export default function PrioritySystem() {
                 <div className="ps-pulse-ring">
                   <div className="ps-pulse-inner">🧬</div>
                 </div>
-                <h3>Analysing Symptoms...</h3>
+                <h3>Anysing Symptoms...</h3>
                 <p>
                   Cross-referencing with your medical history and our diagnostic
                   engine.
@@ -331,9 +301,8 @@ export default function PrioritySystem() {
               <>
                 {/* Severity Card */}
                 <div
-                  className={`ps-severity-card ${
-                    animating ? "ps-severity-visible" : ""
-                  }`}
+                  className={`ps-severity-card ${animating ? "ps-severity-visible" : ""
+                    }`}
                   style={{ background: details.bg }}
                 >
                   <div className="ps-severity-header">
@@ -373,9 +342,8 @@ export default function PrioritySystem() {
                         stroke={details.ring}
                         strokeWidth="10"
                         strokeLinecap="round"
-                        strokeDasharray={`${
-                          animating ? (severity / 100) * 314 : 0
-                        } 314`}
+                        strokeDasharray={`${animating ? (severity / 100) * 314 : 0
+                          } 314`}
                         strokeDashoffset="78.5"
                         style={{ transition: "stroke-dasharray 1.4s ease" }}
                       />
@@ -458,6 +426,6 @@ export default function PrioritySystem() {
           </div>
         </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }
