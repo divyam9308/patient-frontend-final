@@ -4,7 +4,7 @@
 const API_BASE_URL = 'http://localhost:5000/api';
 
 const getHeaders = () => {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
   const headers = {
     'Content-Type': 'application/json',
   };

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../utils/api.js";
 import "./Auth.css";
@@ -16,6 +16,15 @@ export default function Register() {
 
   const handleChange = (e) =>
     setForm({ ...form, [e.target.name]: e.target.value });
+
+  // Auto-login redirect if there is an active session
+  useEffect(() => {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    const user = localStorage.getItem('user') || sessionStorage.getItem('user');
+    if (token && user) {
+      navigate("/dashboard");
+    }
+  }, [navigate]);
 
   const handleNext = (e) => {
     e.preventDefault();
@@ -43,6 +52,50 @@ export default function Register() {
       navigate("/dashboard");
     } catch (err) {
       setError(err.message || "Registration failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle Google SDK Load
+  useEffect(() => {
+    if (window.google) {
+      initGoogle();
+    } else {
+      const script = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+      if (script) {
+        script.addEventListener('load', initGoogle);
+      }
+    }
+    
+    function initGoogle() {
+      window.google.accounts.id.initialize({
+        client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID || '1234567890-example.apps.googleusercontent.com',
+        callback: handleGoogleResponse
+      });
+      window.google.accounts.id.renderButton(
+        document.getElementById("google-signUp-btn"),
+        { theme: "outline", size: "large", width: 250 }
+      );
+    }
+  }, []);
+
+  const handleGoogleResponse = async (response) => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await api.post('/auth/google-verify', {
+        credential: response.credential
+      });
+
+      // Default session storage for register flow
+      localStorage.setItem('token', res.token);
+      localStorage.setItem('user', JSON.stringify(res.user));
+      localStorage.setItem('rememberMe', 'true');
+
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err.message || "Google registration failed");
     } finally {
       setLoading(false);
     }
@@ -243,6 +296,12 @@ export default function Register() {
                 <button type="submit" className="btn-submit">
                   Continue <span className="btn-arrow">→</span>
                 </button>
+
+                <div className="divider" style={{ margin: "20px 0" }}><span>or create with</span></div>
+
+                <div className="social-row" style={{ display: "flex", justifyContent: "center" }}>
+                  <div id="google-signUp-btn"></div>
+                </div>
               </form>
             ) : (
               <form className="auth-form" onSubmit={handleSubmit}>
@@ -357,7 +416,7 @@ export default function Register() {
               </form>
             )}
 
-            <p className="auth-switch">
+             <p className="auth-switch">
               Already have an account? <a href="/login">Sign in →</a>
             </p>
           </div>
