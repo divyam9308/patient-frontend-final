@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../components/DashboardLayout";
+import { api } from "../utils/api.js";
 import './Dashboard.css';
 import "./PrioritySystem.css";
 
@@ -128,7 +129,7 @@ export default function PrioritySystem() {
     setLoading(true);
     setAnimating(false);
 
-    setTimeout(() => {
+    setTimeout(async () => {
       const baseScore = selectedSymptoms.reduce((acc, id) => {
         const s = ALL_SYMPTOMS.find((s) => s.id === id);
         return acc + (s ? s.weight : 0);
@@ -143,6 +144,24 @@ export default function PrioritySystem() {
       const ageBonus = age > 60 ? 10 : age < 12 ? 8 : 0;
       const raw = baseScore + durationBonus + ageBonus;
       const pct = Math.min(98, Math.round((raw / 150) * 100));
+
+      const severityDetails = getSeverityDetails(pct);
+      const symptomLabels = selectedSymptoms.map(id => {
+        const s = ALL_SYMPTOMS.find(s => s.id === id);
+        return s ? s.label : '';
+      }).filter(Boolean);
+
+      // Save triage request to backend
+      try {
+        await api.post('/priority', {
+          symptoms: symptomLabels,
+          severityScore: pct,
+          severityLabel: severityDetails.label,
+        });
+      } catch (err) {
+        // Non-blocking — continue showing results even if save fails
+        console.warn('Priority save failed:', err.message);
+      }
 
       setSeverity(pct);
       setLoading(false);

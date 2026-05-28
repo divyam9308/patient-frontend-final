@@ -1,0 +1,44 @@
+// index.js
+// Main Express server entry point for the Patient Portal backend
+// Uses Supabase as the database provider
+
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+
+// Import all route files
+import authRoutes from './routes/authRoutes.js';
+import dashboardRoutes from './routes/dashboardRoutes.js';
+import appointmentRoutes from './routes/appointmentRoutes.js';
+import medicalRecordsRoutes from './routes/medicalRecordsRoutes.js';
+import medicineRoutes from './routes/medicineRoutes.js';
+import treatmentRoutes from './routes/treatmentRoutes.js';
+import priorityRoutes from './routes/priorityRoutes.js';
+
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+// ── Middleware ──────────────────────────────────────────
+app.use(cors({ origin: 'http://localhost:3000' })); // Allow React dev server
+app.use(express.json());
+
+// ── Routes ─────────────────────────────────────────────
+app.use('/api/auth', authRoutes);             // Login.js, Register.js
+app.use('/api/dashboard', dashboardRoutes);   // Dashboard.js
+app.use('/api/appointments', appointmentRoutes);    // Appointment.js
+app.use('/api/medical-records', medicalRecordsRoutes); // MedicalRecords.js
+app.use('/api/medicines', medicineRoutes);    // MedicineVerification.js
+app.use('/api/treatments', treatmentRoutes);  // Treatments.js
+app.use('/api/priority', priorityRoutes);     // PrioritySystem.js
+
+// ── Health Check ────────────────────────────────────────
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', message: 'Patient Portal API is running' });
+});
+
+// ── Start Server ────────────────────────────────────────
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});

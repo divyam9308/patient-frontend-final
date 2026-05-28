@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { api } from "../utils/api.js";
 import "./Auth.css";
 
 export default function Login() {
@@ -7,17 +8,25 @@ export default function Login() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleChange = (e) =>
     setForm({ ...form, [e.target.name]: e.target.value });
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
+    setError("");
+    try {
+      const response = await api.post('/auth/login', form);
+      localStorage.setItem('token', response.token);
+      localStorage.setItem('user', JSON.stringify(response.user));
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err.message || "Invalid email or password");
+    } finally {
       setLoading(false);
-      navigate("/Dashboard");
-    }, 1500);
+    }
   };
 
   return (
@@ -109,6 +118,16 @@ export default function Login() {
               <h2 className="card-title">Sign In</h2>
               <p className="card-sub">Access your health dashboard securely</p>
             </div>
+
+            {error && (
+              <div className="auth-error-msg" style={{
+                color: "#dc2626", background: "#fef2f2", padding: "10px 14px",
+                borderRadius: "10px", border: "1px solid #fecaca", fontSize: "13px",
+                marginBottom: "16px", textAlign: "left", fontWeight: 500
+              }}>
+                ⚠️ {error}
+              </div>
+            )}
 
             <form className="auth-form" onSubmit={handleSubmit}>
               <div className="field-group">

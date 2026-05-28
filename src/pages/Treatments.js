@@ -1,41 +1,57 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import DashboardLayout from "../components/DashboardLayout";
+import { api } from "../utils/api.js";
 import './Dashboard.css';
 import "./Treatments.css";
-
-const INITIAL_TREATMENTS = [
-  { id: 1, name: "Type 2 Diabetes Management", doc: "Dr. Meena Kapoor — Endocrinology", status: "ongoing", progress: 68, start: "Jan 2024", note: "Regular HbA1c monitoring. Diet control + Metformin.", meds: ["Metformin 500mg (Twice daily)"] },
-  { id: 2, name: "Hypertension Control", doc: "Dr. Raj Verma — Cardiology", status: "ongoing", progress: 55, start: "Mar 2024", note: "Target BP < 130/80 mmHg. Monthly check-ups advised.", meds: ["Amlodipine 5mg (Once daily)"] },
-  { id: 3, name: "Vitamin D Deficiency", doc: "Dr. Anita Singh — General Medicine", status: "completed", progress: 100, start: "Aug 2023", note: "12-week supplementation completed. Vitamin D3 levels normalised.", meds: ["Vitamin D3 1000 IU (Once daily)"] },
-];
 
 export default function Treatments() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
-  const [treatments] = useState(INITIAL_TREATMENTS);
+  const [treatments, setTreatments] = useState([]);
+  const [loadingTreatments, setLoadingTreatments] = useState(true);
 
   // Diary log state
-  const [diaryLogs, setDiaryLogs] = useState([
-    { id: 1, date: "26 May 2026", treatment: "Type 2 Diabetes Management", text: "Walked 45 mins. Took metformin. Blood sugar fasting: 110 mg/dL." },
-    { id: 2, date: "25 May 2026", treatment: "Hypertension Control", text: "BP was 126/80 in the evening. Feeling normal." }
-  ]);
-  const [selectedTreatmentId, setSelectedTreatmentId] = useState(INITIAL_TREATMENTS[0].id);
+  const [diaryLogs, setDiaryLogs] = useState([]);
+  const [loadingLogs, setLoadingLogs] = useState(true);
+  const [selectedTreatmentId, setSelectedTreatmentId] = useState("");
   const [newLogText, setNewLogText] = useState("");
+  const [savingLog, setSavingLog] = useState(false);
 
-  const handleAddLog = (e) => {
+  // Fetch treatments
+  useEffect(() => {
+    api.get('/treatments')
+      .then(data => {
+        setTreatments(data);
+        if (data.length > 0) setSelectedTreatmentId(data[0].id);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingTreatments(false));
+  }, []);
+
+  // Fetch diary logs
+  useEffect(() => {
+    api.get('/treatments/logs')
+      .then(data => setDiaryLogs(data))
+      .catch(() => {})
+      .finally(() => setLoadingLogs(false));
+  }, []);
+
+  const handleAddLog = async (e) => {
     e.preventDefault();
     if (!newLogText.trim()) return;
-
-    const treatment = treatments.find(t => t.id === Number(selectedTreatmentId));
-    const newLog = {
-      id: Date.now(),
-      date: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
-      treatment: treatment ? treatment.name : "General Log",
-      text: newLogText
-    };
-
-    setDiaryLogs([newLog, ...diaryLogs]);
-    setNewLogText("");
+    setSavingLog(true);
+    try {
+      const newLog = await api.post('/treatments/logs', {
+        treatmentId: selectedTreatmentId || null,
+        text: newLogText,
+      });
+      setDiaryLogs([newLog, ...diaryLogs]);
+      setNewLogText("");
+    } catch (err) {
+      alert("Error saving log: " + err.message);
+    } finally {
+      setSavingLog(false);
+    }
   };
 
   const filteredTreatments = treatments.filter(t => {
@@ -67,24 +83,9 @@ export default function Treatments() {
             />
           </div>
           <div className="t-filter-options">
-            <button
-              className={`t-filter-btn ${filterStatus === "all" ? "active" : ""}`}
-              onClick={() => setFilterStatus("all")}
-            >
-              All
-            </button>
-            <button
-              className={`t-filter-btn ${filterStatus === "ongoing" ? "active" : ""}`}
-              onClick={() => setFilterStatus("ongoing")}
-            >
-              Ongoing
-            </button>
-            <button
-              className={`t-filter-btn ${filterStatus === "completed" ? "active" : ""}`}
-              onClick={() => setFilterStatus("completed")}
-            >
-              Completed
-            </button>
+            <button className={`t-filter-btn ${filterStatus === "all" ? "active" : ""}`} onClick={() => setFilterStatus("all")}>All</button>
+            <button className={`t-filter-btn ${filterStatus === "ongoing" ? "active" : ""}`} onClick={() => setFilterStatus("ongoing")}>Ongoing</button>
+            <button className={`t-filter-btn ${filterStatus === "completed" ? "active" : ""}`} onClick={() => setFilterStatus("completed")}>Completed</button>
           </div>
         </div>
 
@@ -93,7 +94,9 @@ export default function Treatments() {
           <div className="t-list-col">
             <h2 className="t-section-title">🩺 Active & Past Plans</h2>
             <div className="t-treatment-list">
-              {filteredTreatments.length === 0 ? (
+              {loadingTreatments ? (
+                <div className="t-empty-state"><div className="t-empty-icon">⏳</div><h3>Loading treatments...</h3></div>
+              ) : filteredTreatments.length === 0 ? (
                 <div className="t-empty-state">
                   <div className="t-empty-icon">📂</div>
                   <h3>No treatments found</h3>
@@ -123,9 +126,11 @@ export default function Treatments() {
                       )}
                     </div>
 
-                    <div className="t-note-box">
-                      <strong>Physician Note:</strong> {t.note}
-                    </div>
+                    {t.note && (
+                      <div className="t-note-box">
+                        <strong>Physician Note:</strong> {t.note}
+                      </div>
+                    )}
 
                     <div className="t-progress-section">
                       <div className="t-progress-header">
@@ -173,15 +178,19 @@ export default function Treatments() {
                     onChange={(e) => setNewLogText(e.target.value)}
                   ></textarea>
                 </div>
-                <button type="submit" className="t-submit-btn">
-                  Save Diary Entry
+                <button type="submit" className="t-submit-btn" disabled={savingLog}>
+                  {savingLog ? "Saving..." : "Save Diary Entry"}
                 </button>
               </form>
 
               <div className="t-logs-wrapper">
                 <h3 className="t-logs-title">Recent Activity Logs</h3>
                 <div className="t-logs-list">
-                  {diaryLogs.map(log => (
+                  {loadingLogs ? (
+                    <div style={{ padding: 16, color: "#7a9485", fontSize: 13 }}>Loading logs...</div>
+                  ) : diaryLogs.length === 0 ? (
+                    <div style={{ padding: 16, color: "#7a9485", fontSize: 13 }}>No diary entries yet. Add your first one above!</div>
+                  ) : diaryLogs.map(log => (
                     <div className="t-log-item" key={log.id}>
                       <div className="t-log-meta">
                         <span className="t-log-date">{log.date}</span>

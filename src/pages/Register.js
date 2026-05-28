@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { api } from "../utils/api.js";
 import "./Auth.css";
 
 export default function Register() {
@@ -11,6 +12,7 @@ export default function Register() {
   });
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleChange = (e) =>
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -20,13 +22,30 @@ export default function Register() {
     setStep(2);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (form.password !== form.confirm) {
+      setError("Passwords do not match");
+      return;
+    }
     setLoading(true);
-    setTimeout(() => {
+    setError("");
+    try {
+      const payload = {
+        name: form.fullName,
+        email: form.email,
+        phone: form.phone,
+        password: form.password,
+      };
+      const response = await api.post('/auth/register', payload);
+      localStorage.setItem('token', response.token);
+      localStorage.setItem('user', JSON.stringify(response.user));
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err.message || "Registration failed");
+    } finally {
       setLoading(false);
-      navigate("/Dashboard");
-    }, 1500);
+    }
   };
 
   const strength = (() => {
@@ -130,6 +149,16 @@ export default function Register() {
               <h2 className="card-title">Create Account</h2>
               <p className="card-sub">Join the smart healthcare platform</p>
             </div>
+
+            {error && (
+              <div className="auth-error-msg" style={{
+                color: "#dc2626", background: "#fef2f2", padding: "10px 14px",
+                borderRadius: "10px", border: "1px solid #fecaca", fontSize: "13px",
+                marginBottom: "16px", textAlign: "left", fontWeight: 500
+              }}>
+                ⚠️ {error}
+              </div>
+            )}
 
             {step === 1 ? (
               <form className="auth-form" onSubmit={handleNext}>
