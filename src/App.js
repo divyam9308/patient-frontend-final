@@ -9,6 +9,7 @@ import Appointment from "./pages/Appointment";
 import Dashboard from "./pages/Dashboard";
 import Treatments from "./pages/Treatments";
 import MedicineVerification from "./pages/MedicineVerification";
+import MedicalRecords from "./pages/MedicalRecords";
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/treatments" element={<Treatments />} />
         <Route path="/medicines" element={<MedicineVerification />} />
+        <Route path="/records" element={<MedicalRecords />} />
       </Routes>
     </Router>
   );

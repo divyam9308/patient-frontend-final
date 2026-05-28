@@ -39,6 +39,8 @@ export default function DashboardLayout({ children, activeTab, onTabChange }) {
       navigate("/medicines");
     } else if (item.id === "appointments") {
       navigate("/appointments");
+    } else if (item.id === "records") {
+      navigate("/records");
     } else {
       if (onTabChange) {
         onTabChange(item.id);

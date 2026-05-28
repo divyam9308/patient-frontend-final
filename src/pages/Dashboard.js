@@ -369,6 +369,10 @@ export default function Dashboard() {
       navigate("/appointments");
       return;
     }
+    if (newTab === "records") {
+      navigate("/records");
+      return;
+    }
     setTab(newTab);
   };
 
