@@ -288,13 +288,7 @@
   overflow: hidden;
   position: relative;
 }
-.db-welcome-banner::after {
-  content: '🏥';
-  position: absolute;
-  right: 32px;
-  font-size: 80px;
-  opacity: 0.12;
-}
+
 .db-welcome-title {
   font-family: 'DM Serif Display', serif;
   font-size: 1.5rem;
