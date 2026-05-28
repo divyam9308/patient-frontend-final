@@ -1,92 +1,65 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import DashboardLayout from "../components/DashboardLayout";
+import { api } from "../utils/api.js";
 import './Dashboard.css';
 import "./MedicineVerification.css";
 
-const INITIAL_MEDICINES = [
-  { id: 1, name: "Metformin 500mg", mfr: "Sun Pharma Ltd", expiry: "Nov 2026", batch: "MP2312A", verified: true, date: "24 May 2026", icon: "💊", color: "#e8f5ee" },
-  { id: 2, name: "Atorvastatin 20mg", mfr: "Cipla Ltd", expiry: "Aug 2026", batch: "AT2209B", verified: true, date: "20 May 2026", icon: "🔵", color: "#eff6ff" },
-  { id: 3, name: "Amlodipine 5mg", mfr: "Dr. Reddy's Laboratories", expiry: "Mar 2027", batch: "AM2401C", verified: true, date: "15 May 2026", icon: "❤️", color: "#fef2f2" },
-  { id: 4, name: "Counterfeit/Unverified Tablet", mfr: "Unknown Manufacturer", expiry: "—", batch: "XX9999Z", verified: false, date: "10 May 2026", icon: "⚠️", color: "#fffbeb" },
-];
-
 export default function MedicineVerification() {
-  const [medicines, setMedicines] = useState(INITIAL_MEDICINES);
+  const [medicines, setMedicines] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const [batchCode, setBatchCode] = useState("");
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const [activeMode, setActiveMode] = useState("camera"); // camera or manual
+
+  // Fetch verification history on mount
+  useEffect(() => {
+    api.get('/medicines/verify/history')
+      .then(data => setMedicines(data))
+      .catch(() => {})
+      .finally(() => setLoadingHistory(false));
+  }, []);
+
+  // Helper: call API to verify a batch code
+  const doVerify = async (code) => {
+    const result = await api.post('/medicines/verify', { batchCode: code });
+    setMedicines(prev => [result, ...prev]);
+    setScanResult(result);
+  };
 
   const handleSimulateScan = () => {
     if (scanning) return;
     setScanning(true);
     setScanResult(null);
 
-    // Simulate scanning for 2 seconds
-    setTimeout(() => {
-      // Pick a random medicine to verify
-      const mockMeds = [
-        { name: "Paracetamol 500mg", mfr: "GSK Consumer Healthcare", expiry: "Dec 2027", batch: "PA7788D", verified: true, icon: "💊", color: "#e8f5ee" },
-        { name: "Amoxicillin 250mg", mfr: "Abbott Laboratories", expiry: "Sep 2026", batch: "AM3344X", verified: true, icon: "💊", color: "#e8f5ee" },
-        { name: "Unidentified Capsule", mfr: "Unregistered Import", expiry: "—", batch: "CF5544B", verified: false, icon: "⚠️", color: "#fffbeb" }
-      ];
+    // Simulate a short camera scan delay, then send a random known batch code
+    const randomCodes = ["MP2312A", "AT2209B", "AM2401C", "PA7788D", "XX9999Z"];
+    const code = randomCodes[Math.floor(Math.random() * randomCodes.length)];
 
-      const selected = mockMeds[Math.floor(Math.random() * mockMeds.length)];
-      const newMed = {
-        ...selected,
-        id: Date.now(),
-        date: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
-      };
-
-      setMedicines([newMed, ...medicines]);
-      setScanResult(newMed);
-      setScanning(false);
+    setTimeout(async () => {
+      try {
+        await doVerify(code);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setScanning(false);
+      }
     }, 2200);
   };
 
-  const handleManualVerify = (e) => {
+  const handleManualVerify = async (e) => {
     e.preventDefault();
     if (!batchCode.trim()) return;
-
     setScanning(true);
     setScanResult(null);
-
-    setTimeout(() => {
-      // Check if code matches a mock pattern
-      const code = batchCode.toUpperCase().trim();
-      let verifiedMed;
-
-      if (code.startsWith("MP") || code.startsWith("AT") || code.startsWith("AM") || code === "PA7788D") {
-        verifiedMed = {
-          id: Date.now(),
-          name: code.startsWith("MP") ? "Metformin 500mg" : code.startsWith("AT") ? "Atorvastatin 20mg" : code.startsWith("AM") ? "Amlodipine 5mg" : "Paracetamol 500mg",
-          mfr: "Verified Pharma Partner",
-          expiry: "Oct 2027",
-          batch: code,
-          verified: true,
-          date: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
-          icon: "💊",
-          color: "#e8f5ee"
-        };
-      } else {
-        verifiedMed = {
-          id: Date.now(),
-          name: `Unknown Batch (${code})`,
-          mfr: "Unverified / Fake Source",
-          expiry: "—",
-          batch: code,
-          verified: false,
-          date: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
-          icon: "⚠️",
-          color: "#fffbeb"
-        };
-      }
-
-      setMedicines([verifiedMed, ...medicines]);
-      setScanResult(verifiedMed);
-      setScanning(false);
+    try {
+      await doVerify(batchCode.trim());
       setBatchCode("");
-    }, 1500);
+    } catch (err) {
+      alert("Verification error: " + err.message);
+    } finally {
+      setScanning(false);
+    }
   };
 
   return (
@@ -134,7 +107,7 @@ export default function MedicineVerification() {
                       <>
                         <span className="mv-feed-icon">📷</span>
                         <h3>Tap here to Scan Barcode</h3>
-                        <p>Simulate a barcode camera scan using mock verification</p>
+                        <p>Simulate a barcode camera scan using the verification API</p>
                       </>
                     )}
                   </div>
@@ -153,7 +126,7 @@ export default function MedicineVerification() {
                     disabled={scanning}
                   />
                   <small className="mv-input-tip">
-                    Note: Batch codes starting with 'MP', 'AT', 'AM' will simulate a verified result.
+                    Note: Batch codes starting with 'MP', 'AT', 'AM' simulate a verified result.
                   </small>
                 </div>
                 <button type="submit" className="mv-verify-btn" disabled={!batchCode.trim() || scanning}>
@@ -165,7 +138,7 @@ export default function MedicineVerification() {
             {/* Live scan/verify feedback */}
             {scanning && activeMode === "manual" && (
               <div className="mv-loading-status">
-                <span className="mv-loader"></span> Connecting to Central drug database Registry...
+                <span className="mv-loader"></span> Connecting to Central Drug Database Registry...
               </div>
             )}
 
@@ -209,11 +182,15 @@ export default function MedicineVerification() {
               <span className="mv-meds-count">{medicines.length} verified</span>
             </div>
             <p className="mv-history-desc">
-              List of medicines previously verified on this device:
+              List of medicines previously verified on this account:
             </p>
 
             <div className="mv-history-list">
-              {medicines.map(m => (
+              {loadingHistory ? (
+                <div style={{ padding: 16, color: "#7a9485", fontSize: 13 }}>Loading history...</div>
+              ) : medicines.length === 0 ? (
+                <div style={{ padding: 16, color: "#7a9485", fontSize: 13 }}>No verifications yet. Scan a medicine above!</div>
+              ) : medicines.map(m => (
                 <div className="mv-history-item" key={m.id}>
                   <div className="mv-history-icon" style={{ background: m.color }}>{m.icon}</div>
                   <div className="mv-history-info">

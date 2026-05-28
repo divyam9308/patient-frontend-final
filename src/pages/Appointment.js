@@ -1,14 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import DashboardLayout from "../components/DashboardLayout";
+import { api } from "../utils/api.js";
 import "./Dashboard.css";
-
-const APPOINTMENTS = [
-  { id: 1, doc: "Dr. Meena Kapoor", dept: "Cardiology", day: "18", mon: "APR", time: "10:30 AM", status: "upcoming" },
-  { id: 2, doc: "Dr. Raj Verma", dept: "Dermatology", day: "24", mon: "APR", time: "02:00 PM", status: "upcoming" },
-  { id: 3, doc: "Dr. Anita Singh", dept: "General Medicine", day: "02", mon: "APR", time: "11:00 AM", status: "completed" },
-  { id: 4, doc: "Dr. Suresh Naidu", dept: "Orthopedics", day: "15", mon: "MAR", time: "09:00 AM", status: "completed" },
-  { id: 5, doc: "Dr. Pooja Iyer", dept: "Neurology", day: "10", mon: "MAR", time: "03:30 PM", status: "cancelled" },
-];
 
 const STATUS_STYLES = {
   upcoming: { label: "Upcoming", color: "#2d6a3f", bg: "#eaf4ec", border: "#c8e6c9" },
@@ -18,11 +11,58 @@ const STATUS_STYLES = {
 
 export default function Appointment() {
   const [filter, setFilter] = useState("all");
+  const [appointments, setAppointments] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showBooking, setShowBooking] = useState(false);
+  const [bookForm, setBookForm] = useState({ doc: "", dept: "", date: "", time: "" });
+  const [booking, setBooking] = useState(false);
+  const [bookError, setBookError] = useState("");
+  const [cancellingId, setCancellingId] = useState(null);
+
+  const fetchAppointments = () => {
+    setLoading(true);
+    api.get('/appointments')
+      .then(data => setAppointments(data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchAppointments();
+  }, []);
 
   const filtered = filter === "all"
-    ? APPOINTMENTS
-    : APPOINTMENTS.filter(a => a.status === filter);
+    ? appointments
+    : appointments.filter(a => a.status === filter);
+
+  const handleBook = async (e) => {
+    e.preventDefault();
+    setBookError("");
+    setBooking(true);
+    try {
+      const newAppt = await api.post('/appointments', bookForm);
+      setAppointments([newAppt, ...appointments]);
+      setShowBooking(false);
+      setBookForm({ doc: "", dept: "", date: "", time: "" });
+    } catch (err) {
+      setBookError(err.message || "Failed to book appointment");
+    } finally {
+      setBooking(false);
+    }
+  };
+
+  const handleCancel = async (id) => {
+    if (!window.confirm("Cancel this appointment?")) return;
+    setCancellingId(id);
+    try {
+      await api.delete(`/appointments/${id}`);
+      setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: 'cancelled' } : a));
+    } catch (err) {
+      alert("Error: " + err.message);
+    } finally {
+      setCancellingId(null);
+    }
+  };
 
   return (
     <DashboardLayout activeTab="appointments">
@@ -39,7 +79,7 @@ export default function Appointment() {
         + Book New Appointment
       </button>
 
-      {/* Book New Appointment modal (simple) */}
+      {/* Book New Appointment modal */}
       {showBooking && (
         <div style={{
           position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)",
@@ -56,47 +96,62 @@ export default function Appointment() {
               Fill in the details to schedule a visit
             </div>
 
-            {[
-              { label: "Doctor / Specialist", placeholder: "e.g. Dr. Mehta — Cardiology" },
-              { label: "Preferred Date", placeholder: "DD / MM / YYYY", type: "date" },
-              { label: "Preferred Time", placeholder: "e.g. 10:30 AM", type: "time" },
-            ].map(f => (
-              <div key={f.label} style={{ marginBottom: 16 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#4a6355", display: "block", marginBottom: 6 }}>
-                  {f.label}
-                </label>
-                <input
-                  type={f.type || "text"}
-                  placeholder={f.placeholder}
-                  style={{
-                    width: "100%", padding: "10px 14px", borderRadius: 10,
-                    border: "1.5px solid #d4e8da", fontSize: 14, fontFamily: "'DM Sans', sans-serif",
-                    background: "#f0f8f2", outline: "none", boxSizing: "border-box"
-                  }}
-                />
+            {bookError && (
+              <div style={{ color: "#dc2626", background: "#fef2f2", padding: "8px 12px", borderRadius: 8, border: "1px solid #fecaca", fontSize: 13, marginBottom: 14 }}>
+                ⚠️ {bookError}
               </div>
-            ))}
+            )}
 
-            <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-              <button
-                onClick={() => setShowBooking(false)}
-                style={{
-                  flex: 1, padding: "11px", borderRadius: 50, border: "1.5px solid #d4e8da",
-                  background: "transparent", fontSize: 14, fontWeight: 600, color: "#4a6355", cursor: "pointer"
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => setShowBooking(false)}
-                style={{
-                  flex: 1, padding: "11px", borderRadius: 50, border: "none",
-                  background: "#2d6a3f", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer"
-                }}
-              >
-                Confirm Booking
-              </button>
-            </div>
+            <form onSubmit={handleBook}>
+              {[
+                { label: "Doctor / Specialist", key: "doc", placeholder: "e.g. Dr. Mehta — Cardiology", type: "text" },
+                { label: "Department", key: "dept", placeholder: "e.g. Cardiology", type: "text" },
+                { label: "Preferred Date", key: "date", type: "date" },
+                { label: "Preferred Time (24hr)", key: "time", type: "time" },
+              ].map(f => (
+                <div key={f.key} style={{ marginBottom: 16 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "#4a6355", display: "block", marginBottom: 6 }}>
+                    {f.label}
+                  </label>
+                  <input
+                    type={f.type}
+                    placeholder={f.placeholder}
+                    value={bookForm[f.key]}
+                    onChange={e => setBookForm({ ...bookForm, [f.key]: e.target.value })}
+                    required
+                    style={{
+                      width: "100%", padding: "10px 14px", borderRadius: 10,
+                      border: "1.5px solid #d4e8da", fontSize: 14, fontFamily: "'DM Sans', sans-serif",
+                      background: "#f0f8f2", outline: "none", boxSizing: "border-box"
+                    }}
+                  />
+                </div>
+              ))}
+
+              <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowBooking(false); setBookError(""); }}
+                  style={{
+                    flex: 1, padding: "11px", borderRadius: 50, border: "1.5px solid #d4e8da",
+                    background: "transparent", fontSize: 14, fontWeight: 600, color: "#4a6355", cursor: "pointer"
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={booking}
+                  style={{
+                    flex: 1, padding: "11px", borderRadius: 50, border: "none",
+                    background: "#2d6a3f", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
+                    opacity: booking ? 0.7 : 1
+                  }}
+                >
+                  {booking ? "Booking..." : "Confirm Booking"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -113,7 +168,7 @@ export default function Appointment() {
             <span style={{ fontSize: 16, fontWeight: 700, color: "#1b3d2a" }}>All Appointments</span>
           </div>
           <span style={{ fontSize: 13, color: "#7a9485", fontWeight: 500 }}>
-            {APPOINTMENTS.length} total
+            {appointments.length} total
           </span>
         </div>
 
@@ -143,8 +198,16 @@ export default function Appointment() {
 
         {/* Appointments list */}
         <div>
-          {filtered.map((a, i) => {
-            const s = STATUS_STYLES[a.status];
+          {loading ? (
+            <div style={{ padding: "48px 28px", textAlign: "center", color: "#7a9485", fontSize: 14 }}>
+              Loading appointments...
+            </div>
+          ) : filtered.length === 0 ? (
+            <div style={{ padding: "48px 28px", textAlign: "center", color: "#7a9485", fontSize: 14 }}>
+              No {filter === 'all' ? '' : filter} appointments found.
+            </div>
+          ) : filtered.map((a, i) => {
+            const s = STATUS_STYLES[a.status] || STATUS_STYLES.upcoming;
             return (
               <div
                 key={a.id}
@@ -188,25 +251,24 @@ export default function Appointment() {
                   </span>
 
                   {a.status === "upcoming" && (
-                    <button style={{
-                      padding: "6px 16px", borderRadius: 50,
-                      border: "1.5px solid #d4e8da", background: "#fff",
-                      color: "#4a6355", fontSize: 12, fontWeight: 600,
-                      cursor: "pointer", fontFamily: "'DM Sans', sans-serif"
-                    }}>
-                      Reschedule
+                    <button
+                      onClick={() => handleCancel(a.id)}
+                      disabled={cancellingId === a.id}
+                      style={{
+                        padding: "6px 16px", borderRadius: 50,
+                        border: "1.5px solid #fecaca", background: "#fff",
+                        color: "#dc2626", fontSize: 12, fontWeight: 600,
+                        cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+                        opacity: cancellingId === a.id ? 0.6 : 1
+                      }}
+                    >
+                      {cancellingId === a.id ? "Cancelling..." : "Cancel"}
                     </button>
                   )}
                 </div>
               </div>
             );
           })}
-
-          {filtered.length === 0 && (
-            <div style={{ padding: "48px 28px", textAlign: "center", color: "#7a9485", fontSize: 14 }}>
-              No {filter} appointments found.
-            </div>
-          )}
         </div>
       </div>
     </DashboardLayout>

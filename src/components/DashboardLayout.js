@@ -2,28 +2,36 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import "../pages/Dashboard.css"; // Reuse dashboard styling
 
-const USER = {
-  name: "Arjun Sharma",
-  email: "arjun.sharma@gmail.com",
-  phone: "+91 98765 43210",
-  dob: "14 March 1992",
-  gender: "Male",
-  bloodGroup: "B+",
-  address: "42, Sector 17, Chandigarh, Punjab - 160017",
-  aadhar: "7845 6231 9012",
-  initials: "AS",
-  role: "Patient",
-  registeredSince: "Jan 2023",
-  emergency: "Priya Sharma (Wife) — +91 98001 22334",
-};
+
 
 export default function DashboardLayout({ children, activeTab, onTabChange }) {
   const navigate = useNavigate();
 
+  React.useEffect(() => {
+    if (!localStorage.getItem('token')) {
+      navigate('/login');
+    }
+  }, [navigate]);
+
+  const user = (() => {
+    try {
+      const storedUser = localStorage.getItem('user');
+      return storedUser ? JSON.parse(storedUser) : {};
+    } catch {
+      return {};
+    }
+  })();
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/login');
+  };
+
   const navItems = [
     { id: "overview",      icon: "🏠", label: "Overview" },
     { id: "profile",       icon: "👤", label: "My Profile" },
-    { id: "appointments",  icon: "📅", label: "Appointments",          badge: 2 },
+    { id: "appointments",  icon: "📅", label: "Appointments" },
     { id: "treatments",    icon: "🏥", label: "Treatments" },
     { id: "medicines",     icon: "💊", label: "Medicine Verification" },
     { id: "records",       icon: "📁", label: "Medical Records" },
@@ -65,7 +73,7 @@ export default function DashboardLayout({ children, activeTab, onTabChange }) {
           </div>
           <div className="db-nav-divider" />
           <div className="db-nav-greeting">
-            Hello, <strong>{USER.name.split(" ")[0]}</strong> 👋
+            Hello, <strong>{user.name ? user.name.split(" ")[0] : "Patient"}</strong> 👋
           </div>
         </div>
         <div className="db-nav-right">
@@ -74,7 +82,7 @@ export default function DashboardLayout({ children, activeTab, onTabChange }) {
             <span className="db-notif-dot" />
           </div>
           <div className="db-nav-icon-btn" title="Settings" onClick={() => handleNavClick({ id: "profile" })}>⚙️</div>
-          <div className="db-nav-avatar" title={USER.name}>{USER.initials}</div>
+          <div className="db-nav-avatar" title={user.name}>{user.initials || "PT"}</div>
         </div>
       </nav>
 
@@ -106,7 +114,7 @@ export default function DashboardLayout({ children, activeTab, onTabChange }) {
           </button>
 
           <div className="db-sidebar-footer">
-            <button className="db-logout-btn" onClick={() => navigate("/login")}>
+            <button className="db-logout-btn" onClick={handleLogout}>
               🚪 Log Out
             </button>
           </div>

@@ -1,52 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import DashboardLayout from "../components/DashboardLayout";
+import { api } from "../utils/api.js";
 import "./Dashboard.css";
-
-/* ─── Mock user data ─── */
-const USER = {
-  name: "Arjun Sharma",
-  email: "arjun.sharma@gmail.com",
-  phone: "+91 98765 43210",
-  dob: "14 March 1992",
-  gender: "Male",
-  bloodGroup: "B+",
-  address: "42, Sector 17, Chandigarh, Punjab - 160017",
-  aadhar: "7845 6231 9012",
-  initials: "AS",
-  role: "Patient",
-  registeredSince: "Jan 2023",
-  emergency: "Priya Sharma (Wife) — +91 98001 22334",
-};
-
-const APPOINTMENTS = [
-  { id: 1, doc: "Dr. Meena Kapoor", dept: "Cardiology", day: "18", mon: "Apr", time: "10:30 AM", status: "upcoming" },
-  { id: 2, doc: "Dr. Raj Verma", dept: "Dermatology", day: "24", mon: "Apr", time: "02:00 PM", status: "upcoming" },
-  { id: 3, doc: "Dr. Anita Singh", dept: "General Medicine", day: "02", mon: "Apr", time: "11:00 AM", status: "completed" },
-  { id: 4, doc: "Dr. Suresh Naidu", dept: "Orthopedics", day: "15", mon: "Mar", time: "09:00 AM", status: "completed" },
-  { id: 5, doc: "Dr. Pooja Iyer", dept: "Neurology", day: "10", mon: "Mar", time: "03:30 PM", status: "cancelled" },
-];
-
-const MEDICATIONS = [
-  { id: 1, name: "Metformin 500mg", purpose: "Diabetes management", freq: "Twice daily", icon: "💊", color: "#e8f5ee" },
-  { id: 2, name: "Atorvastatin 20mg", purpose: "Cholesterol control", freq: "Once at night", icon: "🔵", color: "#eff6ff" },
-  { id: 3, name: "Amlodipine 5mg", purpose: "Blood pressure", freq: "Once daily", icon: "❤️", color: "#fef2f2" },
-  { id: 4, name: "Vitamin D3 1000 IU", purpose: "Bone health supplement", freq: "Once daily", icon: "🌟", color: "#fffbeb" },
-];
-
-const RECORDS = [
-  { id: 1, name: "Blood Test Report — March 2025", date: "02 Mar 2025", type: "Lab Report", size: "1.2 MB", icon: "🧪", color: "#e8f5ee" },
-  { id: 2, name: "Chest X-Ray — Jan 2025", date: "15 Jan 2025", type: "Radiology", size: "4.8 MB", icon: "🫁", color: "#eff6ff" },
-  { id: 3, name: "ECG Report — Nov 2024", date: "20 Nov 2024", type: "Cardiology", size: "0.8 MB", icon: "❤️", color: "#fef2f2" },
-  { id: 4, name: "Discharge Summary — Sep 2024", date: "10 Sep 2024", type: "Hospital Doc", size: "2.1 MB", icon: "🏥", color: "#fffbeb" },
-  { id: 5, name: "Prescription — Dr. Verma Feb 2025", date: "28 Feb 2025", type: "Prescription", size: "0.3 MB", icon: "📋", color: "#f5f3ff" },
-];
-
-const TREATMENTS = [
-  { id: 1, name: "Type 2 Diabetes Management", doc: "Dr. Meena Kapoor — Endocrinology", status: "ongoing", progress: 68, start: "Jan 2024", note: "Regular HbA1c monitoring. Diet control + Metformin." },
-  { id: 2, name: "Hypertension Control", doc: "Dr. Raj Verma — Cardiology", status: "ongoing", progress: 55, start: "Mar 2024", note: "Target BP < 130/80 mmHg. Monthly check-ups advised." },
-  { id: 3, name: "Vitamin D Deficiency", doc: "Dr. Anita Singh — General Medicine", status: "completed", progress: 100, start: "Aug 2023", note: "12-week supplementation completed. Levels normalised." },
-];
 
 /* ─── Stat Card ─── */
 function StatCard({ icon, num, label, iconBg }) {
@@ -63,35 +19,63 @@ function StatCard({ icon, num, label, iconBg }) {
 
 /* ─── OVERVIEW TAB ─── */
 function OverviewTab({ navigate }) {
+  const [stats, setStats] = useState({ upcomingAppts: 0, activeMedicines: 0, medicalRecords: 0, treatments: 0 });
+  const [appointments, setAppointments] = useState([]);
+  const [medications, setMedications] = useState([]);
+  const [treatments, setTreatments] = useState([]);
+  const [user] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('user')) || {}; } catch { return {}; }
+  });
+
+  useEffect(() => {
+    // Fetch dashboard summary (stats + upcoming appointments)
+    api.get('/dashboard/summary').then(data => {
+      setStats(data.stats);
+      setAppointments(data.upcomingAppointments || []);
+    }).catch(() => {});
+
+    // Fetch medications for dashboard card
+    api.get('/medicines').then(data => setMedications(data.slice(0, 4))).catch(() => {});
+
+    // Fetch treatments for dashboard card
+    api.get('/treatments').then(data => setTreatments(data.filter(t => t.status === 'ongoing').slice(0, 2))).catch(() => {});
+  }, []);
+
+  const firstName = user?.name ? user.name.split(' ')[0] : 'there';
+
   return (
     <div>
       <div className="db-welcome-banner">
         <div>
-          <div className="db-welcome-title">Good morning, {USER.name.split(" ")[0]}! 👋</div>
-          <div className="db-welcome-sub">You have 2 upcoming appointments this week.</div>
+          <div className="db-welcome-title">Good morning, {firstName}! 👋</div>
+          <div className="db-welcome-sub">
+            {stats.upcomingAppts > 0
+              ? `You have ${stats.upcomingAppts} upcoming appointment${stats.upcomingAppts > 1 ? 's' : ''} this week.`
+              : 'No upcoming appointments. Book one today!'}
+          </div>
         </div>
-        {/* ✅ navigates directly to the separate Appointments page */}
         <button className="db-welcome-btn" onClick={() => navigate("/appointments")}>
           View Appointments →
         </button>
       </div>
 
       <div className="db-stats-row">
-        <StatCard icon="📅" num="2" label="Upcoming Appts" iconBg="#e8f5ee" />
-        <StatCard icon="💊" num="4" label="Active Medicines" iconBg="#eff6ff" />
-        <StatCard icon="📋" num="5" label="Medical Records" iconBg="#fef2f2" />
-        <StatCard icon="🏥" num="3" label="Treatments" iconBg="#fffbeb" />
+        <StatCard icon="📅" num={stats.upcomingAppts} label="Upcoming Appts" iconBg="#e8f5ee" />
+        <StatCard icon="💊" num={stats.activeMedicines} label="Active Medicines" iconBg="#eff6ff" />
+        <StatCard icon="📋" num={stats.medicalRecords} label="Medical Records" iconBg="#fef2f2" />
+        <StatCard icon="🏥" num={stats.treatments} label="Treatments" iconBg="#fffbeb" />
       </div>
 
       <div className="db-two-col">
         <div className="db-card">
           <div className="db-card-header">
             <div className="db-card-title">📅 Upcoming Appointments</div>
-            {/* ✅ also navigates to the separate page */}
             <button className="db-card-action" onClick={() => navigate("/appointments")}>View all →</button>
           </div>
           <div className="db-appt-list">
-            {APPOINTMENTS.filter(a => a.status === "upcoming").map(a => (
+            {appointments.length === 0 ? (
+              <div style={{ padding: '20px 16px', color: '#7a9485', fontSize: 13 }}>No upcoming appointments.</div>
+            ) : appointments.map(a => (
               <div className="db-appt-item" key={a.id}>
                 <div className="db-appt-date-box">
                   <div className="db-appt-date-day">{a.day}</div>
@@ -113,7 +97,9 @@ function OverviewTab({ navigate }) {
             <button className="db-card-action" onClick={() => navigate("/medicines")}>View all →</button>
           </div>
           <div className="db-med-list">
-            {MEDICATIONS.map(m => (
+            {medications.length === 0 ? (
+              <div style={{ padding: '20px 16px', color: '#7a9485', fontSize: 13 }}>No medications on record.</div>
+            ) : medications.map(m => (
               <div className="db-med-item" key={m.id}>
                 <div className="db-med-icon" style={{ background: m.color }}>{m.icon}</div>
                 <div>
@@ -131,38 +117,38 @@ function OverviewTab({ navigate }) {
         <div className="db-card">
           <div className="db-card-header">
             <div className="db-card-title">❤️ Latest Vitals</div>
-            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>As of 02 Apr 2025</span>
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>As of last visit</span>
           </div>
           <div className="db-vitals-grid">
             <div className="db-vital-item">
               <div className="db-vital-label">Blood Pressure</div>
-              <div className="db-vital-val">128<span className="db-vital-unit">/82 mmHg</span></div>
-              <span className="db-vital-status status-watch">Watch</span>
+              <div className="db-vital-val">—<span className="db-vital-unit"> mmHg</span></div>
+              <span className="db-vital-status status-normal">N/A</span>
             </div>
             <div className="db-vital-item">
               <div className="db-vital-label">Blood Sugar</div>
-              <div className="db-vital-val">108<span className="db-vital-unit"> mg/dL</span></div>
-              <span className="db-vital-status status-normal">Normal</span>
+              <div className="db-vital-val">—<span className="db-vital-unit"> mg/dL</span></div>
+              <span className="db-vital-status status-normal">N/A</span>
             </div>
             <div className="db-vital-item">
               <div className="db-vital-label">Heart Rate</div>
-              <div className="db-vital-val">74<span className="db-vital-unit"> bpm</span></div>
-              <span className="db-vital-status status-normal">Normal</span>
+              <div className="db-vital-val">—<span className="db-vital-unit"> bpm</span></div>
+              <span className="db-vital-status status-normal">N/A</span>
             </div>
             <div className="db-vital-item">
               <div className="db-vital-label">SpO₂</div>
-              <div className="db-vital-val">98<span className="db-vital-unit">%</span></div>
-              <span className="db-vital-status status-normal">Normal</span>
+              <div className="db-vital-val">—<span className="db-vital-unit">%</span></div>
+              <span className="db-vital-status status-normal">N/A</span>
             </div>
             <div className="db-vital-item">
               <div className="db-vital-label">Weight</div>
-              <div className="db-vital-val">78<span className="db-vital-unit"> kg</span></div>
-              <span className="db-vital-status status-normal">Normal</span>
+              <div className="db-vital-val">—<span className="db-vital-unit"> kg</span></div>
+              <span className="db-vital-status status-normal">N/A</span>
             </div>
             <div className="db-vital-item">
               <div className="db-vital-label">Temperature</div>
-              <div className="db-vital-val">98.4<span className="db-vital-unit">°F</span></div>
-              <span className="db-vital-status status-normal">Normal</span>
+              <div className="db-vital-val">—<span className="db-vital-unit">°F</span></div>
+              <span className="db-vital-status status-normal">N/A</span>
             </div>
           </div>
         </div>
@@ -173,7 +159,9 @@ function OverviewTab({ navigate }) {
             <button className="db-card-action" onClick={() => navigate("/treatments")}>View all →</button>
           </div>
           <div className="db-treatment-list">
-            {TREATMENTS.filter(t => t.status === "ongoing").map(t => (
+            {treatments.length === 0 ? (
+              <div style={{ padding: '20px 16px', color: '#7a9485', fontSize: 13 }}>No active treatments.</div>
+            ) : treatments.map(t => (
               <div className="db-treatment-item" key={t.id} style={{ padding: "14px 16px" }}>
                 <div className="db-treatment-header" style={{ marginBottom: 8 }}>
                   <div>
@@ -197,27 +185,118 @@ function OverviewTab({ navigate }) {
 
 /* ─── PROFILE TAB ─── */
 function ProfileTab() {
+  const [user, setUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('user')) || {}; } catch { return {}; }
+  });
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
+
+  useEffect(() => {
+    api.get('/dashboard/profile').then(data => {
+      setUser(data);
+      localStorage.setItem('user', JSON.stringify(data));
+    }).catch(() => {});
+  }, []);
+
+  const handleEdit = () => {
+    setForm({
+      name: user.name || '',
+      phone: user.phone || '',
+      dob: user.dob || '',
+      gender: user.gender || '',
+      bloodGroup: user.bloodGroup || user.blood_group || '',
+      address: user.address || '',
+      aadhar: user.aadhar || '',
+      emergency: user.emergency || user.emergency_contact || '',
+    });
+    setEditing(true);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const updated = await api.put('/dashboard/profile', form);
+      setUser(updated);
+      localStorage.setItem('user', JSON.stringify(updated));
+      setEditing(false);
+      setSaveMsg('Profile updated!');
+      setTimeout(() => setSaveMsg(''), 3000);
+    } catch (err) {
+      setSaveMsg('Error: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const initials = user?.initials || (user?.name ? user.name.split(' ').map(p => p[0]).join('').toUpperCase().substring(0, 2) : '??');
+  const bloodGroup = user?.bloodGroup || user?.blood_group || '—';
+  const emergency = user?.emergency || user?.emergency_contact || '—';
+  const aadhar = user?.aadhar || '—';
+
   return (
     <div>
+      {saveMsg && (
+        <div style={{ padding: '10px 16px', background: '#eaf4ec', border: '1px solid #c8e6c9', borderRadius: 10, marginBottom: 16, color: '#2d6a3f', fontWeight: 600, fontSize: 13 }}>
+          ✓ {saveMsg}
+        </div>
+      )}
+
       <div className="db-profile-top">
         <div className="db-profile-avatar-wrap">
-          <div className="db-profile-avatar">{USER.initials}</div>
+          <div className="db-profile-avatar">{initials}</div>
           <div className="db-profile-verified">✓</div>
         </div>
         <div style={{ flex: 1 }}>
-          <div className="db-profile-name">{USER.name}</div>
-          <div className="db-profile-email">{USER.email} · {USER.phone}</div>
+          <div className="db-profile-name">{user?.name || '—'}</div>
+          <div className="db-profile-email">{user?.email || '—'} · {user?.phone || '—'}</div>
           <div className="db-profile-tags">
-            <span className="db-profile-tag">🩸 {USER.bloodGroup}</span>
-            <span className="db-profile-tag">👤 {USER.gender}</span>
-            <span className="db-profile-tag">🎂 {USER.dob}</span>
+            <span className="db-profile-tag">🩸 {bloodGroup}</span>
+            <span className="db-profile-tag">👤 {user?.gender || '—'}</span>
+            <span className="db-profile-tag">🎂 {user?.dob || '—'}</span>
             <span className="db-profile-tag">✅ Verified Patient</span>
           </div>
         </div>
-        <button className="db-edit-btn" style={{ background: "rgba(255,255,255,0.15)", border: "1.5px solid rgba(255,255,255,0.35)", color: "white" }}>
+        <button className="db-edit-btn" style={{ background: "rgba(255,255,255,0.15)", border: "1.5px solid rgba(255,255,255,0.35)", color: "white" }} onClick={handleEdit}>
           ✏️ Edit Profile
         </button>
       </div>
+
+      {editing && (
+        <div className="db-card" style={{ marginBottom: 20 }}>
+          <div className="db-card-header">
+            <div className="db-card-title">✏️ Edit Profile</div>
+          </div>
+          <div className="db-info-grid">
+            {[
+              { label: 'Full Name', key: 'name' },
+              { label: 'Phone', key: 'phone' },
+              { label: 'Date of Birth', key: 'dob' },
+              { label: 'Gender', key: 'gender' },
+              { label: 'Blood Group', key: 'bloodGroup' },
+              { label: 'Address', key: 'address' },
+              { label: 'Aadhar', key: 'aadhar' },
+              { label: 'Emergency Contact', key: 'emergency' },
+            ].map(f => (
+              <div key={f.key} className="db-info-item">
+                <div className="db-info-label">{f.label}</div>
+                <input
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1.5px solid #d4e8da', fontSize: 13, fontFamily: 'inherit' }}
+                  value={form[f.key] || ''}
+                  onChange={e => setForm({ ...form, [f.key]: e.target.value })}
+                />
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+            <button className="db-new-appt-btn" style={{ margin: 0 }} onClick={handleSave} disabled={saving}>
+              {saving ? 'Saving...' : '💾 Save Changes'}
+            </button>
+            <button className="db-edit-btn" onClick={() => setEditing(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
 
       <div className="db-two-col" style={{ marginBottom: 20 }}>
         <div className="db-aadhar-card">
@@ -229,11 +308,11 @@ function ProfileTab() {
             <div className="db-aadhar-emblem">🇮🇳</div>
           </div>
           <div className="db-aadhar-body">
-            <div className="db-aadhar-photo">{USER.initials}</div>
+            <div className="db-aadhar-photo">{initials}</div>
             <div className="db-aadhar-info">
-              <div className="db-aadhar-name">{USER.name}</div>
-              <div className="db-aadhar-dob">DOB: {USER.dob} · {USER.gender}</div>
-              <div className="db-aadhar-number">{USER.aadhar}</div>
+              <div className="db-aadhar-name">{user?.name || '—'}</div>
+              <div className="db-aadhar-dob">DOB: {user?.dob || '—'} · {user?.gender || '—'}</div>
+              <div className="db-aadhar-number">{aadhar}</div>
               <div style={{ fontSize: 11, opacity: 0.6 }}>आधार</div>
             </div>
           </div>
@@ -246,28 +325,27 @@ function ProfileTab() {
         <div className="db-card">
           <div className="db-card-header">
             <div className="db-card-title">👤 Personal Information</div>
-            <button className="db-edit-btn">✏️ Edit</button>
           </div>
           <div className="db-info-grid">
             <div className="db-info-item">
               <div className="db-info-label">Full Name</div>
-              <div className="db-info-value">{USER.name}</div>
+              <div className="db-info-value">{user?.name || '—'}</div>
             </div>
             <div className="db-info-item">
               <div className="db-info-label">Date of Birth</div>
-              <div className="db-info-value">{USER.dob}</div>
+              <div className="db-info-value">{user?.dob || '—'}</div>
             </div>
             <div className="db-info-item">
               <div className="db-info-label">Gender</div>
-              <div className="db-info-value">{USER.gender}</div>
+              <div className="db-info-value">{user?.gender || '—'}</div>
             </div>
             <div className="db-info-item">
               <div className="db-info-label">Blood Group</div>
-              <div className="db-info-value" style={{ color: "var(--red)", fontWeight: 700 }}>{USER.bloodGroup}</div>
+              <div className="db-info-value" style={{ color: "var(--red)", fontWeight: 700 }}>{bloodGroup}</div>
             </div>
             <div className="db-info-item" style={{ gridColumn: "1/-1" }}>
               <div className="db-info-label">Address</div>
-              <div className="db-info-value">{USER.address}</div>
+              <div className="db-info-value">{user?.address || '—'}</div>
             </div>
           </div>
         </div>
@@ -277,20 +355,19 @@ function ProfileTab() {
         <div className="db-card">
           <div className="db-card-header">
             <div className="db-card-title">📞 Contact & Account</div>
-            <button className="db-edit-btn">✏️ Edit</button>
           </div>
           <div className="db-info-grid">
             <div className="db-info-item">
               <div className="db-info-label">Email</div>
-              <div className="db-info-value">{USER.email}</div>
+              <div className="db-info-value">{user?.email || '—'}</div>
             </div>
             <div className="db-info-item">
               <div className="db-info-label">Phone</div>
-              <div className="db-info-value">{USER.phone}</div>
+              <div className="db-info-value">{user?.phone || '—'}</div>
             </div>
             <div className="db-info-item">
               <div className="db-info-label">Member Since</div>
-              <div className="db-info-value">{USER.registeredSince}</div>
+              <div className="db-info-value">{user?.registeredSince || '—'}</div>
             </div>
             <div className="db-info-item">
               <div className="db-info-label">Account Type</div>
@@ -302,15 +379,14 @@ function ProfileTab() {
         <div className="db-card">
           <div className="db-card-header">
             <div className="db-card-title">🚨 Emergency Contact</div>
-            <button className="db-edit-btn">✏️ Edit</button>
           </div>
           <div style={{ padding: "14px 16px", background: "var(--red-bg)", borderRadius: "var(--radius-sm)", border: "1px solid #fecaca", marginBottom: 14 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: "var(--red)", marginBottom: 4 }}>Emergency Contact</div>
-            <div style={{ fontSize: 14, color: "var(--text-dark)", fontWeight: 500 }}>{USER.emergency}</div>
+            <div style={{ fontSize: 14, color: "var(--text-dark)", fontWeight: 500 }}>{emergency}</div>
           </div>
           <div style={{ padding: "14px 16px", background: "var(--green-mist)", borderRadius: "var(--radius-sm)", border: "1px solid var(--green-border)" }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: "var(--green-dark)", marginBottom: 4 }}>Aadhar Linked</div>
-            <div style={{ fontSize: 14, color: "var(--text-dark)", fontFamily: "monospace", letterSpacing: 2 }}>{USER.aadhar}</div>
+            <div style={{ fontSize: 14, color: "var(--text-dark)", fontFamily: "monospace", letterSpacing: 2 }}>{aadhar}</div>
           </div>
           <div style={{ marginTop: 16 }}>
             <div className="db-card-title" style={{ marginBottom: 12 }}>🔒 Security</div>
@@ -323,31 +399,11 @@ function ProfileTab() {
   );
 }
 
-/* ─── MEDICAL RECORDS TAB ─── */
+/* ─── MEDICAL RECORDS TAB (lightweight, points to full page) ─── */
 function RecordsTab() {
-  return (
-    <div>
-      <div className="db-card">
-        <div className="db-card-header">
-          <div className="db-card-title">📁 Medical Records</div>
-          <button className="db-new-appt-btn" style={{ margin: 0, padding: "8px 18px", fontSize: 13 }}>＋ Upload Record</button>
-        </div>
-        <div className="db-records-list">
-          {RECORDS.map(r => (
-            <div className="db-record-item" key={r.id}>
-              <div className="db-record-icon" style={{ background: r.color }}>{r.icon}</div>
-              <div className="db-record-info">
-                <div className="db-record-name">{r.name}</div>
-                <div className="db-record-meta">{r.type} · {r.date}</div>
-              </div>
-              <div className="db-record-size">{r.size}</div>
-              <button className="db-record-dl">⬇ Download</button>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+  const navigate = useNavigate();
+  useEffect(() => { navigate('/records'); }, [navigate]);
+  return null;
 }
 
 /* ─── MAIN DASHBOARD ─── */
@@ -362,8 +418,6 @@ export default function Dashboard() {
     }
   }, [location.state]);
 
-  // ✅ handleTabChange is NOW inside the component
-  //    so it has access to navigate and setTab
   const handleTabChange = (newTab) => {
     if (newTab === "appointments") {
       navigate("/appointments");
@@ -376,8 +430,10 @@ export default function Dashboard() {
     setTab(newTab);
   };
 
+  const user = (() => { try { return JSON.parse(localStorage.getItem('user')) || {}; } catch { return {}; } })();
+
   const pageTitles = {
-    overview: { title: "Dashboard", sub: "Welcome back, " + USER.name.split(" ")[0] },
+    overview: { title: "Dashboard", sub: "Welcome back, " + (user?.name ? user.name.split(' ')[0] : 'there') },
     profile: { title: "My Profile", sub: "Manage your personal information and Aadhar details" },
     records: { title: "Medical Records", sub: "Access and download your health documents" },
   };

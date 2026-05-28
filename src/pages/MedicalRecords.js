@@ -1,102 +1,24 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import DashboardLayout from "../components/DashboardLayout";
-import "./Dashboard.css"; // Global design system styles
-import "./MedicalRecords.css"; // Page specific styles
+import { api } from "../utils/api.js";
+import "./Dashboard.css";
+import "./MedicalRecords.css";
 
-// Helper for initial medical records
-const INITIAL_RECORDS = [
-  {
-    id: 1,
-    name: "Blood Test Report — March 2025",
-    date: "02 Mar 2025",
-    type: "Lab Report",
-    size: "1.2 MB",
-    icon: "🧪",
-    color: "#e8f5ee",
-    doctor: "Dr. Meena Kapoor (Endocrinology)",
-    facility: "Apollo Diagnostics Centre",
-    notes: "Fasting blood sugar is slightly elevated. HbA1c is within pre-diabetic range (6.2%). Patient advised to follow low-carb diet and continue Metformin twice daily. Retest in 3 months.",
-    vitals: [
-      { name: "HbA1c", value: "6.2%", range: "4.0% - 5.6%", status: "High" },
-      { name: "Fasting Blood Sugar", value: "108 mg/dL", range: "70 - 100 mg/dL", status: "High" },
-      { name: "Total Cholesterol", value: "180 mg/dL", range: "< 200 mg/dL", status: "Normal" },
-      { name: "Triglycerides", value: "142 mg/dL", range: "< 150 mg/dL", status: "Normal" },
-    ]
-  },
-  {
-    id: 2,
-    name: "Chest X-Ray — Jan 2025",
-    date: "15 Jan 2025",
-    type: "Radiology",
-    size: "4.8 MB",
-    icon: "🫁",
-    color: "#eff6ff",
-    doctor: "Dr. Anita Singh (General Medicine)",
-    facility: "Max Healthcare Imaging",
-    notes: "Chest PA view shows clear lung fields. No focal consolidations, pleural effusion, or pneumothorax. Cardiothoracic ratio is normal. Hilar structures are normal. Bony thorax is intact.",
-    vitals: [
-      { name: "Left Lung", value: "Clear", range: "Clear", status: "Normal" },
-      { name: "Right Lung", value: "Clear", range: "Clear", status: "Normal" },
-      { name: "Cardiothoracic Ratio", value: "Normal (<0.50)", range: "Normal", status: "Normal" },
-    ]
-  },
-  {
-    id: 3,
-    name: "ECG Report — Nov 2024",
-    date: "20 Nov 2024",
-    type: "Cardiology",
-    size: "0.8 MB",
-    icon: "❤️",
-    color: "#fef2f2",
-    doctor: "Dr. Raj Verma (Cardiology)",
-    facility: "Metro Heart & Vascular Institute",
-    notes: "ECG shows Normal Sinus Rhythm at 74 bpm. Normal axis, normal intervals. No acute ST-T wave abnormalities or ischemic changes. Compare with previous tracing if clinically indicated.",
-    vitals: [
-      { name: "Heart Rate", value: "74 bpm", range: "60 - 100 bpm", status: "Normal" },
-      { name: "Rhythm", value: "Sinus Rhythm", range: "Normal Sinus", status: "Normal" },
-      { name: "PR Interval", value: "160 ms", range: "120 - 200 ms", status: "Normal" },
-      { name: "QTc Interval", value: "410 ms", range: "< 450 ms", status: "Normal" },
-    ]
-  },
-  {
-    id: 4,
-    name: "Discharge Summary — Sep 2024",
-    date: "10 Sep 2024",
-    type: "Hospital Doc",
-    size: "2.1 MB",
-    icon: "🏥",
-    color: "#fffbeb",
-    doctor: "Dr. Suresh Naidu (Orthopedic Surgery)",
-    facility: "Fortis Hospital",
-    notes: "Patient admitted with acute left knee pain. Diagnosed with mild osteoarthritis. Managed conservatively with physical therapy, cold compression, and NSAIDs. Advised weight reduction and knee exercises.",
-    vitals: [
-      { name: "Diagnosis", value: "Osteoarthritis", range: "Mild Left Knee", status: "Normal" },
-      { name: "Treatment", value: "Physiotherapy", range: "10 Sessions", status: "Normal" },
-      { name: "Weight Advised", value: "Reduce 5kg", range: "Target < 75kg", status: "Normal" },
-    ]
-  },
-  {
-    id: 5,
-    name: "Prescription — Dr. Verma Feb 2025",
-    date: "28 Feb 2025",
-    type: "Prescription",
-    size: "0.3 MB",
-    icon: "📋",
-    color: "#f5f3ff",
-    doctor: "Dr. Anita Singh (General Medicine)",
-    facility: "HealthCare Clinic",
-    notes: "Follow up prescription for ongoing type 2 diabetes management and general bone health. Reminded to complete physical routine and dietary recommendations.",
-    vitals: [
-      { name: "Metformin 500mg", value: "1-0-1 (after meals)", range: "Diabetes", status: "Normal" },
-      { name: "Vitamin D3 1000 IU", value: "1-0-0 (morning)", range: "Supplements", status: "Normal" },
-    ]
-  }
-];
 
 export default function MedicalRecords() {
-  const [records, setRecords] = useState(INITIAL_RECORDS);
+  const [records, setRecords] = useState([]);
+  const [loadingRecords, setLoadingRecords] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
+  const [uploading, setUploading] = useState(false);
+
+  // Fetch records from backend on mount
+  useEffect(() => {
+    api.get('/medical-records')
+      .then(data => setRecords(data))
+      .catch(() => {})
+      .finally(() => setLoadingRecords(false));
+  }, []);
   
   // Modals state
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -142,10 +64,11 @@ export default function MedicalRecords() {
     }
   };
 
-  // Handle Form Submission
-  const handleUploadSubmit = (e) => {
+  // Handle Form Submission — saves to backend
+  const handleUploadSubmit = async (e) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
+    setUploading(true);
 
     // Parse Vitals string: "HbA1c: 6.0%, Vitamin D: 30"
     const parsedVitals = [];
@@ -156,12 +79,7 @@ export default function MedicalRecords() {
         if (colonIndex !== -1) {
           const name = part.substring(0, colonIndex).trim();
           const value = part.substring(colonIndex + 1).trim();
-          parsedVitals.push({
-            name,
-            value,
-            range: "Referenced",
-            status: "Normal"
-          });
+          parsedVitals.push({ name, value, range: "Referenced", status: "Normal" });
         }
       });
     }
@@ -175,10 +93,8 @@ export default function MedicalRecords() {
     else if (newType === "Hospital Doc") { color = "#fffbeb"; icon = "🏥"; }
     else if (newType === "Other") { color = "#f0fdf4"; icon = "📁"; }
 
-    const record = {
-      id: Date.now(),
+    const payload = {
       name: newTitle,
-      date: newDate ? new Date(newDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
       type: newType,
       size: selectedFile ? `${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB` : "1.1 MB",
       icon,
@@ -189,8 +105,15 @@ export default function MedicalRecords() {
       vitals: parsedVitals.length > 0 ? parsedVitals : [{ name: "Document Status", value: "Archived", range: "N/A", status: "Normal" }]
     };
 
-    setRecords([record, ...records]);
-    
+    try {
+      const newRecord = await api.post('/medical-records', payload);
+      setRecords([newRecord, ...records]);
+    } catch (err) {
+      alert('Upload failed: ' + err.message);
+    } finally {
+      setUploading(false);
+    }
+
     // Reset Form
     setNewTitle("");
     setNewType("Lab Report");
@@ -291,7 +214,13 @@ export default function MedicalRecords() {
               </div>
 
               <div className="mr-records-container">
-                {filteredRecords.length === 0 ? (
+                {loadingRecords ? (
+                  <div className="mr-empty-state">
+                    <span className="mr-empty-icon">⏳</span>
+                    <h3 className="mr-empty-title">Loading records...</h3>
+                    <p className="mr-empty-desc">Fetching your medical documents from the server.</p>
+                  </div>
+                ) : filteredRecords.length === 0 ? (
                   <div className="mr-empty-state">
                     <span className="mr-empty-icon">📂</span>
                     <h3 className="mr-empty-title">No records found</h3>
@@ -367,73 +296,94 @@ export default function MedicalRecords() {
                 </p>
               </div>
 
-              <div className="mr-vitals-trends-list">
-                {/* Glucose trend */}
-                <div className="mr-trend-item">
-                  <div className="mr-trend-top">
-                    <span className="mr-trend-label">HbA1c (Blood Sugar)</span>
-                    <span className="mr-trend-status warning">Pre-diabetic</span>
-                  </div>
-                  <div className="mr-trend-middle">
-                    <span className="mr-trend-value">6.2%</span>
-                    <span className="mr-trend-change down">↓ -0.3% (from 6.5%)</span>
-                  </div>
-                  <div className="mr-sparkline-wrap">
-                    <span>Aug 24: 6.8%</span>
-                    <div className="mr-spark-bar-container">
-                      <div
-                        className="mr-spark-bar-fill"
-                        style={{ width: "62%", background: "var(--amber)" }}
-                      />
-                    </div>
-                    <span>Mar 25: 6.2%</span>
-                  </div>
+              {records.length === 0 ? (
+                <div style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "40px 20px",
+                  textAlign: "center",
+                  background: "#fcfdfd",
+                  borderRadius: "12px",
+                  border: "1px dashed #e2e8f0",
+                  marginTop: "16px"
+                }}>
+                  <div style={{ fontSize: "2.5rem", marginBottom: "12px" }}>📊</div>
+                  <h4 style={{ margin: "0 0 6px 0", color: "var(--text-primary)", fontWeight: 600 }}>No vitals tracked yet</h4>
+                  <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
+                    Once you upload reports containing clinical results (like HbA1c, Vitamin D, or Cholesterol), your key metrics and trends will appear here automatically.
+                  </p>
                 </div>
+              ) : (
+                <div className="mr-vitals-trends-list">
+                  {/* Glucose trend */}
+                  <div className="mr-trend-item">
+                    <div className="mr-trend-top">
+                      <span className="mr-trend-label">HbA1c (Blood Sugar)</span>
+                      <span className="mr-trend-status warning">Pre-diabetic</span>
+                    </div>
+                    <div className="mr-trend-middle">
+                      <span className="mr-trend-value">6.2%</span>
+                      <span className="mr-trend-change down">↓ -0.3% (from 6.5%)</span>
+                    </div>
+                    <div className="mr-sparkline-wrap">
+                      <span>Aug 24: 6.8%</span>
+                      <div className="mr-spark-bar-container">
+                        <div
+                          className="mr-spark-bar-fill"
+                          style={{ width: "62%", background: "var(--amber)" }}
+                        />
+                      </div>
+                      <span>Mar 25: 6.2%</span>
+                    </div>
+                  </div>
 
-                {/* Cholesterol Trend */}
-                <div className="mr-trend-item">
-                  <div className="mr-trend-top">
-                    <span className="mr-trend-label">Total Cholesterol</span>
-                    <span className="mr-trend-status normal">Optimal</span>
-                  </div>
-                  <div className="mr-trend-middle">
-                    <span className="mr-trend-value">180 mg/dL</span>
-                    <span className="mr-trend-change down">↓ -15 mg/dL (from 195)</span>
-                  </div>
-                  <div className="mr-sparkline-wrap">
-                    <span>Nov 24: 195</span>
-                    <div className="mr-spark-bar-container">
-                      <div
-                        className="mr-spark-bar-fill"
-                        style={{ width: "80%", background: "var(--green-cta)" }}
-                      />
+                  {/* Cholesterol Trend */}
+                  <div className="mr-trend-item">
+                    <div className="mr-trend-top">
+                      <span className="mr-trend-label">Total Cholesterol</span>
+                      <span className="mr-trend-status normal">Optimal</span>
                     </div>
-                    <span>Mar 25: 180</span>
+                    <div className="mr-trend-middle">
+                      <span className="mr-trend-value">180 mg/dL</span>
+                      <span className="mr-trend-change down">↓ -15 mg/dL (from 195)</span>
+                    </div>
+                    <div className="mr-sparkline-wrap">
+                      <span>Nov 24: 195</span>
+                      <div className="mr-spark-bar-container">
+                        <div
+                          className="mr-spark-bar-fill"
+                          style={{ width: "80%", background: "var(--green-cta)" }}
+                        />
+                      </div>
+                      <span>Mar 25: 180</span>
+                    </div>
                   </div>
-                </div>
 
-                {/* Vitamin D Trend */}
-                <div className="mr-trend-item">
-                  <div className="mr-trend-top">
-                    <span className="mr-trend-label">Vitamin D3</span>
-                    <span className="mr-trend-status normal">Sufficient</span>
-                  </div>
-                  <div className="mr-trend-middle">
-                    <span className="mr-trend-value">32 ng/mL</span>
-                    <span className="mr-trend-change up-good">↑ +14 ng/mL (from 18)</span>
-                  </div>
-                  <div className="mr-sparkline-wrap">
-                    <span>Aug 23: 18</span>
-                    <div className="mr-spark-bar-container">
-                      <div
-                        className="mr-spark-bar-fill"
-                        style={{ width: "100%", background: "var(--green-cta)" }}
-                      />
+                  {/* Vitamin D Trend */}
+                  <div className="mr-trend-item">
+                    <div className="mr-trend-top">
+                      <span className="mr-trend-label">Vitamin D3</span>
+                      <span className="mr-trend-status normal">Sufficient</span>
                     </div>
-                    <span>Mar 25: 32</span>
+                    <div className="mr-trend-middle">
+                      <span className="mr-trend-value">32 ng/mL</span>
+                      <span className="mr-trend-change up-good">↑ +14 ng/mL (from 18)</span>
+                    </div>
+                    <div className="mr-sparkline-wrap">
+                      <span>Aug 23: 18</span>
+                      <div className="mr-spark-bar-container">
+                        <div
+                          className="mr-spark-bar-fill"
+                          style={{ width: "100%", background: "var(--green-cta)" }}
+                        />
+                      </div>
+                      <span>Mar 25: 32</span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -580,8 +530,8 @@ export default function MedicalRecords() {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="mr-btn-action">
-                  Upload & Parse →
+                <button type="submit" className="mr-btn-action" disabled={uploading}>
+                  {uploading ? "Uploading..." : "Upload & Parse →"}
                 </button>
               </div>
             </form>
@@ -615,8 +565,8 @@ export default function MedicalRecords() {
                   </div>
                   <div className="mr-doc-patient-info">
                     <div>
-                      <strong>Patient:</strong> Arjun Sharma<br />
-                      <strong>DOB:</strong> 14 Mar 1992
+                      <strong>Patient:</strong> {(() => { try { return JSON.parse(localStorage.getItem('user'))?.name || 'Patient'; } catch { return 'Patient'; } })()}<br />
+                      <strong>DOB:</strong> {(() => { try { return JSON.parse(localStorage.getItem('user'))?.dob || '—'; } catch { return '—'; } })()}
                     </div>
                     <div style={{ textAlign: "right" }}>
                       <strong>Date:</strong> {selectedRecord.date}<br />
