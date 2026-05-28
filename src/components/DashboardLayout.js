@@ -8,14 +8,15 @@ export default function DashboardLayout({ children, activeTab, onTabChange }) {
   const navigate = useNavigate();
 
   React.useEffect(() => {
-    if (!localStorage.getItem('token')) {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (!token) {
       navigate('/login');
     }
   }, [navigate]);
 
   const user = (() => {
     try {
-      const storedUser = localStorage.getItem('user');
+      const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
       return storedUser ? JSON.parse(storedUser) : {};
     } catch {
       return {};
@@ -25,6 +26,8 @@ export default function DashboardLayout({ children, activeTab, onTabChange }) {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
     navigate('/login');
   };
 
