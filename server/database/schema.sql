@@ -34,17 +34,8 @@ CREATE TABLE IF NOT EXISTS patients (
 
 -- ────────────────────────────────────────────────
 -- 2. APPOINTMENTS TABLE (linked to Appointment.js)
+-- Replaced by relational tables at the end of the file.
 -- ────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS appointments (
-  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  patient_id      UUID REFERENCES patients(id) ON DELETE CASCADE,
-  doctor_name     TEXT NOT NULL,
-  department      TEXT NOT NULL,
-  appointment_time TIMESTAMP NOT NULL,
-  status          TEXT DEFAULT 'upcoming', -- 'upcoming', 'completed', 'cancelled'
-  created_at      TIMESTAMP DEFAULT NOW(),
-  updated_at      TIMESTAMP DEFAULT NOW()
-);
 
 -- ────────────────────────────────────────────────
 -- 3. MEDICAL RECORDS TABLE (linked to MedicalRecords.js)
@@ -139,19 +130,76 @@ CREATE TABLE IF NOT EXISTS treatment_diary_logs (
 );
 
 -- ────────────────────────────────────────────────
--- MIGRATION: Appointment Booking Enhancements (branch: Appointment)
--- Run these statements if your appointments table was already created
--- before this update. Safe to run multiple times (IF NOT EXISTS).
+-- 9. NORMALIZED APPOINTMENT SYSTEM TABLES
 -- ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS cities (
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name            TEXT UNIQUE NOT NULL
+);
 
--- 1. City preference for appointment
-ALTER TABLE appointments ADD COLUMN IF NOT EXISTS city TEXT;
+CREATE TABLE IF NOT EXISTS departments (
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name            TEXT UNIQUE NOT NULL
+);
 
--- 2. Hospital name selected during multi-step booking
-ALTER TABLE appointments ADD COLUMN IF NOT EXISTS hospital_name TEXT;
+CREATE TABLE IF NOT EXISTS hospitals (
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  city_id         UUID REFERENCES cities(id) ON DELETE CASCADE,
+  name            TEXT NOT NULL,
+  address         TEXT,
+  phone           TEXT,
+  website         TEXT,
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
 
--- 3. Flag for high-alert emergency appointments
-ALTER TABLE appointments ADD COLUMN IF NOT EXISTS is_emergency BOOLEAN DEFAULT false;
+CREATE TABLE IF NOT EXISTS doctors (
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name            TEXT NOT NULL,
+  department_id   UUID REFERENCES departments(id) ON DELETE CASCADE,
+  qualification   TEXT,
+  registration_number TEXT,
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS doctor_hospitals (
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  doctor_id       UUID REFERENCES doctors(id) ON DELETE CASCADE,
+  hospital_id     UUID REFERENCES hospitals(id) ON DELETE CASCADE,
+  room_number     TEXT,
+  consultation_fee NUMERIC,
+  source_url      TEXT,
+  last_verified_at TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS doctor_schedules (
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  doctor_hospital_id UUID REFERENCES doctor_hospitals(id) ON DELETE CASCADE,
+  day_of_week     TEXT NOT NULL,
+  start_time      TIME NOT NULL,
+  end_time        TIME NOT NULL,
+  shift_label     TEXT,
+  max_slots       INTEGER DEFAULT 20
+);
+
+-- DROP existing appointments table to rebuild with relational schema
+DROP TABLE IF EXISTS appointments CASCADE;
+
+CREATE TABLE appointments (
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  patient_id      UUID REFERENCES patients(id) ON DELETE CASCADE,
+  doctor_hospital_id UUID REFERENCES doctor_hospitals(id) ON DELETE CASCADE,
+  appointment_date DATE NOT NULL,
+  appointment_time TIME NOT NULL,
+  status          TEXT DEFAULT 'pending',
+  reason          TEXT,
+  is_emergency    BOOLEAN DEFAULT false,
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Unique index to prevent double booking the exact same doctor at the same time
+CREATE UNIQUE INDEX IF NOT EXISTS unique_appt_slot 
+ON appointments(doctor_hospital_id, appointment_date, appointment_time);
 
 -- ─────────────────────────────────────────────────
 -- HOW TO RUN: Supabase Dashboard → SQL Editor → New Query → paste → Run

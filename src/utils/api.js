@@ -70,3 +70,22 @@ export const api = {
     return handleResponse(response);
   },
 };
+
+// ── Appointment Helper Functions ─────────────────────────
+
+export const getCities = () => api.get('/appointments/cities');
+
+export const getDepartmentsByCity = (cityId) => 
+  api.get(`/appointments/departments?cityId=${cityId}`);
+
+export const getHospitalsByCityAndDepartment = (cityId, departmentId) => 
+  api.get(`/appointments/hospitals?cityId=${cityId}&departmentId=${departmentId}`);
+
+export const getDoctorsByHospitalAndDepartment = (hospitalId, departmentId) => 
+  api.get(`/appointments/doctors?hospitalId=${hospitalId}&departmentId=${departmentId}`);
+
+export const getDoctorSchedules = (doctorHospitalId) => 
+  api.get(`/appointments/doctors/${doctorHospitalId}/schedules`);
+
+export const createAppointment = (payload) => 
+  api.post('/appointments', payload);
