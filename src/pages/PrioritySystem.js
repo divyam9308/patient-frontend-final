@@ -387,7 +387,7 @@ export default function PrioritySystem() {
                 <div className="ps-pulse-ring">
                   <div className="ps-pulse-inner">🧬</div>
                 </div>
-                <h3>Anysing Symptoms...</h3>
+                <h3>Analysing Symptoms...</h3>
                 <p>
                   Cross-referencing with your medical history and our diagnostic
                   engine.
