@@ -203,7 +203,7 @@ export const getAppointments = async (req, res) => {
         day: dateObj.getDate().toString().padStart(2, '0'),
         mon: dateObj.toLocaleString('en-US', { month: 'short' }).toUpperCase(),
         time: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
-        status: a.status,
+        status: a.status === 'pending' ? 'upcoming' : (a.status || 'upcoming'),
         appointment_date: a.appointment_date,
         appointment_time: a.appointment_time,
       };
@@ -297,6 +297,8 @@ export const createAppointment = async (req, res) => {
       mon: dateObj.toLocaleString('en-US', { month: 'short' }).toUpperCase(),
       time: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
       status: newAppt.status,
+      appointment_date: newAppt.appointment_date,
+      appointment_time: newAppt.appointment_time,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

@@ -50,6 +50,12 @@ export default function EmergencyBooking() {
     getCities().then(setCities).catch(console.error);
     getTriageRequest(triageId)
       .then(data => {
+        if (data.severity_result !== "emergency") {
+          const mode = data.severity_result === "priority" ? "priority" : "regular";
+          const dept = data.recommended_department_id ? `&dept=${data.recommended_department_id}` : "";
+          navigate(`/appointments?mode=${mode}&triage_id=${triageId}${dept}`, { replace: true });
+          return;
+        }
         setTriageRequest(data);
         if (!recommendedDepartmentId && data.recommended_department_id) {
           setSelectedDept(data.recommended_department_id);

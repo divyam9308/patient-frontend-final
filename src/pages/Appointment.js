@@ -95,9 +95,12 @@ export default function Appointment() {
   // ── Fetch appointments list ─────────────────────────────
   const fetchAppointments = useCallback(() => {
     setLoading(true);
-    api.get("/appointments")
+    return api.get("/appointments")
       .then(data => setAppointments(data))
-      .catch(() => { })
+      .catch((err) => {
+        console.error("Failed to load appointments:", err);
+        setAppointments([]);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -265,8 +268,8 @@ export default function Appointment() {
       };
       if (urlTriageId) payload.triage_id = urlTriageId;
 
-      const newAppt = await createAppointment(payload);
-      setAppointments(prev => [...prev, newAppt].sort((a, b) => new Date(a.appointment_date) - new Date(b.appointment_date)));
+      await createAppointment(payload);
+      await fetchAppointments();
       closeModal();
     } catch (err) {
       setBookError(err.message || "Failed to book appointment");
