@@ -14,10 +14,6 @@ import medicalRecordsRoutes from './routes/medicalRecordsRoutes.js';
 import medicineRoutes from './routes/medicineRoutes.js';
 import treatmentRoutes from './routes/treatmentRoutes.js';
 import priorityRoutes from './routes/priorityRoutes.js';
-import triageRoutes from './routes/triageRoutes.js';
-import emergencyRoutes from './routes/emergencyRoutes.js';
-import ambulanceRoutes from './routes/ambulanceRoutes.js';
-import doctorRoutes from './routes/doctorRoutes.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -41,10 +37,6 @@ app.use('/api/medical-records', medicalRecordsRoutes); // MedicalRecords.js
 app.use('/api/medicines', medicineRoutes);    // MedicineVerification.js
 app.use('/api/treatments', treatmentRoutes);  // Treatments.js
 app.use('/api/priority', priorityRoutes);     // PrioritySystem.js
-app.use('/api/triage', triageRoutes);          // Symptom Triage
-app.use('/api/emergency-requests', emergencyRoutes); // Emergency Requests
-app.use('/api/ambulance-requests', ambulanceRoutes); // Ambulance Requests
-app.use('/api/doctor', doctorRoutes);          // Doctor Emergency Alerts
 
 // ── Health Check ────────────────────────────────────────
 app.get('/health', (req, res) => {

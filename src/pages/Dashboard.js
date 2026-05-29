@@ -477,223 +477,6 @@ function RecordsTab() {
   return null;
 }
 
-/* ─── DOCTOR ALERTS TAB ─── */
-// eslint-disable-next-line no-unused-vars
-function AlertsTab() {
-  const [alerts, setAlerts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  const fetchAlerts = () => {
-    setLoading(true);
-    api.get(`/doctor/emergency-alerts`) // Add ?doctorHospitalId=... if you have it in user profile
-      .then(data => {
-        setAlerts(data);
-      })
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    fetchAlerts();
-    // Poll every 10 seconds for new alerts
-    const interval = setInterval(fetchAlerts, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleAccept = async (requestId, doctorHospitalId) => {
-    try {
-      await api.post(`/doctor/emergency-alerts/${requestId}/accept`, {
-        doctor_hospital_id: doctorHospitalId
-      });
-      fetchAlerts();
-    } catch (err) {
-      alert("Error accepting alert: " + err.message);
-    }
-  };
-
-  const handleDecline = async (requestId, doctorHospitalId) => {
-    try {
-      await api.post(`/doctor/emergency-alerts/${requestId}/decline`, {
-        doctor_hospital_id: doctorHospitalId
-      });
-      fetchAlerts();
-    } catch (err) {
-      alert("Error declining alert: " + err.message);
-    }
-  };
-
-  if (loading && alerts.length === 0) return <div style={{ padding: 20 }}>Loading alerts...</div>;
-  if (error) return <div style={{ padding: 20, color: 'red' }}>Error: {error}</div>;
-
-  return (
-    <div>
-      <div className="db-card">
-        <div className="db-card-header">
-          <div className="db-card-title">🚨 Active Emergency Alerts</div>
-          <button className="db-card-action" onClick={fetchAlerts}>Refresh</button>
-        </div>
-        
-        {alerts.length === 0 ? (
-          <div style={{ padding: '30px 20px', textAlign: 'center', color: '#64748b' }}>
-            No active emergency alerts at this time.
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '16px' }}>
-            {alerts.map(a => (
-              <div key={a.id} style={{ border: '2px solid #fecaca', borderRadius: '12px', padding: '20px', background: '#fef2f2' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                  <div>
-                    <div style={{ color: '#dc2626', fontWeight: '800', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ animation: 'pulse-red 2s infinite' }}>🔴</span> 
-                      EMERGENCY REQUEST
-                    </div>
-                    <div style={{ color: '#991b1b', fontSize: '14px', marginTop: '4px', fontWeight: '600' }}>
-                      Received: {new Date(a.created_at).toLocaleTimeString()}
-                    </div>
-                  </div>
-                  {a.emergency_requests?.ambulance_requested && (
-                    <div style={{ background: '#fef3c7', color: '#b45309', padding: '4px 12px', borderRadius: '50px', fontSize: '13px', fontWeight: '700', border: '1px solid #fde68a' }}>
-                      🚑 AMBULANCE REQUESTED
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ background: 'white', padding: '16px', borderRadius: '8px', border: '1px solid #fecaca', marginBottom: '16px' }}>
-                  <div style={{ marginBottom: '8px' }}>
-                    <strong style={{ color: '#475569' }}>Symptoms / Notes:</strong>
-                    <div style={{ color: '#0f172a', marginTop: '4px' }}>{a.emergency_requests?.symptoms || 'None provided'}</div>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px', fontSize: '14px' }}>
-                    <div>
-                      <strong style={{ color: '#475569' }}>Patient Location:</strong>
-                      <div style={{ color: '#0f172a' }}>{a.emergency_requests?.patient_location || 'Unknown'}</div>
-                    </div>
-                    <div>
-                      <strong style={{ color: '#475569' }}>Patient Contact:</strong>
-                      <div style={{ color: '#0f172a' }}>{a.emergency_requests?.patient_phone || 'Unknown'}</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                  <button 
-                    onClick={() => handleDecline(a.emergency_request_id, a.doctor_hospital_id)}
-                    style={{ padding: '10px 24px', borderRadius: '8px', border: '1.5px solid #fca5a5', background: 'white', color: '#dc2626', fontWeight: '700', cursor: 'pointer' }}
-                  >
-                    Decline
-                  </button>
-                  <button 
-                    onClick={() => handleAccept(a.emergency_request_id, a.doctor_hospital_id)}
-                    style={{ padding: '10px 24px', borderRadius: '8px', border: 'none', background: '#dc2626', color: 'white', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 12px rgba(220,38,38,0.3)' }}
-                  >
-                    ACCEPT & PREPARE
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ─── EMERGENCY ALERTS TAB ─── */
-function EmergencyAlertsTab() {
-  const [alerts, setAlerts] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  const fetchAlerts = () => {
-    setLoading(true);
-    api.get('/doctor/emergency-alerts')
-      .then(data => setAlerts(data))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    fetchAlerts();
-    const interval = setInterval(fetchAlerts, 10000); // poll every 10s
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleAccept = async (alert) => {
-    if (!window.confirm("Accept this emergency request?")) return;
-    try {
-      await api.post(`/doctor/emergency-alerts/${alert.emergency_request_id}/accept`, {
-        doctor_hospital_id: alert.doctor_hospital_id
-      });
-      fetchAlerts();
-      alert("Emergency request accepted successfully.");
-    } catch (err) {
-      alert("Error: " + err.message);
-    }
-  };
-
-  const handleDecline = async (alert) => {
-    try {
-      await api.post(`/doctor/emergency-alerts/${alert.emergency_request_id}/decline`, {
-        doctor_hospital_id: alert.doctor_hospital_id
-      });
-      fetchAlerts();
-    } catch (err) {
-      alert("Error: " + err.message);
-    }
-  };
-
-  return (
-    <div>
-      <div className="db-card">
-        <div className="db-card-header">
-          <div className="db-card-title">🚨 Active Emergency Alerts</div>
-          <button className="db-card-action" onClick={fetchAlerts}>Refresh ↻</button>
-        </div>
-        <div style={{ padding: '16px' }}>
-          {loading && alerts.length === 0 ? (
-            <div style={{ color: '#64748b' }}>Loading alerts...</div>
-          ) : alerts.length === 0 ? (
-            <div style={{ color: '#64748b' }}>No active emergency alerts at this time.</div>
-          ) : (
-            alerts.map(a => {
-              const req = a.emergency_requests;
-              if (!req) return null;
-              return (
-                <div key={a.id} style={{ border: '2px solid #fca5a5', borderRadius: '12px', padding: '16px', marginBottom: '16px', background: '#fef2f2' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <h3 style={{ margin: '0 0 8px 0', color: '#b91c1c' }}>🚨 Emergency Request #{req.id.substring(0, 8)}</h3>
-                      <div style={{ fontSize: '14px', marginBottom: '4px' }}><strong>Symptoms:</strong> {req.symptoms}</div>
-                      <div style={{ fontSize: '14px', marginBottom: '4px' }}><strong>Location:</strong> {req.patient_location}</div>
-                      <div style={{ fontSize: '14px', marginBottom: '4px' }}><strong>Phone:</strong> {req.patient_phone}</div>
-                      <div style={{ fontSize: '14px', marginBottom: '4px' }}><strong>Hospital:</strong> {req.hospitals?.name} ({req.departments?.name})</div>
-                      {req.ambulance_requested && (
-                        <div style={{ fontSize: '14px', color: '#b45309', fontWeight: 'bold', marginTop: '8px' }}>🚑 Ambulance Requested</div>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <button 
-                        onClick={() => handleAccept(a)}
-                        style={{ padding: '8px 16px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
-                        ✓ Accept Case
-                      </button>
-                      <button 
-                        onClick={() => handleDecline(a)}
-                        style={{ padding: '8px 16px', background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
-                        ✕ Decline
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ─── MAIN DASHBOARD ─── */
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -715,10 +498,6 @@ export default function Dashboard() {
       navigate("/records");
       return;
     }
-    if (newTab === "alerts") {
-      setTab("emergency-alerts");
-      return;
-    }
     setTab(newTab);
   };
 
@@ -728,7 +507,6 @@ export default function Dashboard() {
     overview: { title: "Dashboard", sub: "Welcome back, " + (user?.name ? user.name.split(' ')[0] : 'there') },
     profile: { title: "My Profile", sub: "Manage your personal information and Aadhar details" },
     records: { title: "Medical Records", sub: "Access and download your health documents" },
-    "emergency-alerts": { title: "Emergency Alerts", sub: "Review and accept incoming emergency cases" },
   };
 
   return (
@@ -739,7 +517,6 @@ export default function Dashboard() {
       {tab === "overview" && <OverviewTab navigate={navigate} />}
       {tab === "profile" && <ProfileTab />}
       {tab === "records" && <RecordsTab />}
-      {tab === "emergency-alerts" && <EmergencyAlertsTab />}
     </DashboardLayout>
   );
 }

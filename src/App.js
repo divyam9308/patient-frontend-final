@@ -10,7 +10,6 @@ import Dashboard from "./pages/Dashboard";
 import Treatments from "./pages/Treatments";
 import MedicineVerification from "./pages/MedicineVerification";
 import MedicalRecords from "./pages/MedicalRecords";
-import EmergencyBooking from "./pages/EmergencyBooking";
 
 function App() {
   return (
@@ -22,7 +21,6 @@ function App() {
         <Route path="/priority-system" element={<PrioritySystem />} />
         <Route path="/symptom-analyser" element={<PrioritySystem />} />
         <Route path="/appointments" element={<Appointment />} />
-        <Route path="/emergency-booking" element={<EmergencyBooking />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/treatments" element={<Treatments />} />
         <Route path="/medicines" element={<MedicineVerification />} />

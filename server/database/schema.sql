@@ -182,73 +182,19 @@ CREATE TABLE IF NOT EXISTS doctor_schedules (
   max_slots       INTEGER DEFAULT 20
 );
 
--- ────────────────────────────────────────────────
--- 10. TRIAGE & EMERGENCY SYSTEM TABLES
--- ────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS triage_requests (
-  id uuid primary key default gen_random_uuid(),
-  patient_id uuid REFERENCES patients(id) ON DELETE CASCADE,
-  symptoms text not null,
-  symptom_duration text,
-  severity_result text check (severity_result in ('regular','priority','emergency')),
-  recommended_department_id uuid references departments(id),
-  recommended_city_id uuid references cities(id),
-  created_at timestamptz default now()
-);
-
--- DROP existing appointments table to rebuild with new schema
+-- DROP existing appointments table to rebuild with relational schema
 DROP TABLE IF EXISTS appointments CASCADE;
 
 CREATE TABLE appointments (
   id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   patient_id      UUID REFERENCES patients(id) ON DELETE CASCADE,
-  appointment_type TEXT CHECK (appointment_type IN ('follow_up','regular','priority','emergency')),
   doctor_hospital_id UUID REFERENCES doctor_hospitals(id) ON DELETE CASCADE,
   appointment_date DATE NOT NULL,
   appointment_time TIME NOT NULL,
   status          TEXT DEFAULT 'pending',
   reason          TEXT,
-  triage_id       UUID REFERENCES triage_requests(id) ON DELETE SET NULL,
+  is_emergency    BOOLEAN DEFAULT false,
   created_at      TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS emergency_requests (
-  id uuid primary key default gen_random_uuid(),
-  patient_id uuid REFERENCES patients(id) ON DELETE CASCADE,
-  triage_id uuid references triage_requests(id) ON DELETE CASCADE,
-  city_id uuid references cities(id) ON DELETE SET NULL,
-  department_id uuid references departments(id) ON DELETE SET NULL,
-  hospital_id uuid references hospitals(id) ON DELETE SET NULL,
-  symptoms text not null,
-  patient_location text,
-  patient_phone text,
-  ambulance_requested boolean default false,
-  ambulance_status text default 'not_requested',
-  status text default 'open',
-  assigned_doctor_hospital_id uuid references doctor_hospitals(id) ON DELETE SET NULL,
-  accepted_by_doctor_id uuid references doctors(id) ON DELETE SET NULL,
-  accepted_at timestamptz,
-  created_at timestamptz default now()
-);
-
-CREATE TABLE IF NOT EXISTS emergency_alerts (
-  id uuid primary key default gen_random_uuid(),
-  emergency_request_id uuid references emergency_requests(id) on delete cascade,
-  doctor_hospital_id uuid references doctor_hospitals(id) on delete cascade,
-  status text default 'sent',
-  created_at timestamptz default now(),
-  responded_at timestamptz
-);
-
-CREATE TABLE IF NOT EXISTS ambulance_requests (
-  id uuid primary key default gen_random_uuid(),
-  emergency_request_id uuid references emergency_requests(id) on delete cascade,
-  patient_id uuid REFERENCES patients(id) ON DELETE CASCADE,
-  pickup_location text not null,
-  destination_hospital_id uuid references hospitals(id) ON DELETE SET NULL,
-  patient_phone text,
-  status text default 'requested',
-  created_at timestamptz default now()
 );
 
 -- Unique index to prevent double booking the exact same doctor at the same time
