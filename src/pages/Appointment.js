@@ -7,6 +7,7 @@ const STATUS_STYLES = {
   upcoming: { label: "Upcoming", color: "#2d6a3f", bg: "#eaf4ec", border: "#c8e6c9" },
   completed: { label: "Completed", color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe" },
   cancelled: { label: "Cancelled", color: "#dc2626", bg: "#fef2f2", border: "#fecaca" },
+  missed: { label: "Missed", color: "#b45309", bg: "#fffbeb", border: "#fde68a" },
 };
 
 export default function Appointment() {
@@ -31,9 +32,12 @@ export default function Appointment() {
     fetchAppointments();
   }, []);
 
-  const filtered = filter === "all"
-    ? appointments
-    : appointments.filter(a => a.status === filter);
+  const filtered = appointments.filter(a => {
+    const isPast = a.appointment_time ? new Date(a.appointment_time) < new Date() : false;
+    const displayStatus = (a.status === 'upcoming' && isPast) ? 'completed' : a.status;
+    if (filter === "all") return true;
+    return displayStatus === filter;
+  });
 
   const handleBook = async (e) => {
     e.preventDefault();
@@ -61,6 +65,15 @@ export default function Appointment() {
       alert("Error: " + err.message);
     } finally {
       setCancellingId(null);
+    }
+  };
+
+  const handleUpdateStatus = async (id, newStatus) => {
+    try {
+      const updated = await api.put(`/appointments/${id}`, { status: newStatus });
+      setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: updated.status } : a));
+    } catch (err) {
+      alert("Error updating status: " + err.message);
     }
   };
 
@@ -177,7 +190,7 @@ export default function Appointment() {
           display: "flex", gap: 8, padding: "14px 28px",
           background: "#f0f8f2", borderBottom: "1px solid #d4e8da"
         }}>
-          {["all", "upcoming", "completed", "cancelled"].map(f => (
+          {["all", "upcoming", "completed", "missed", "cancelled"].map(f => (
             <button
               key={f}
               onClick={() => setFilter(f)}
@@ -207,7 +220,9 @@ export default function Appointment() {
               No {filter === 'all' ? '' : filter} appointments found.
             </div>
           ) : filtered.map((a, i) => {
-            const s = STATUS_STYLES[a.status] || STATUS_STYLES.upcoming;
+            const isPast = a.appointment_time ? new Date(a.appointment_time) < new Date() : false;
+            const displayStatus = (a.status === 'upcoming' && isPast) ? 'completed' : a.status;
+            const s = STATUS_STYLES[displayStatus] || STATUS_STYLES.upcoming;
             return (
               <div
                 key={a.id}
@@ -243,14 +258,15 @@ export default function Appointment() {
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <span style={{
                     padding: "4px 12px", borderRadius: 50,
-                    background: s.bg, color: s.color,
-                    border: `1px solid ${s.border}`,
+                    background: a.status === 'upcoming' && isPast ? '#f3f4f6' : s.bg,
+                    color: a.status === 'upcoming' && isPast ? '#4b5563' : s.color,
+                    border: `1px solid ${a.status === 'upcoming' && isPast ? '#e5e7eb' : s.border}`,
                     fontSize: 12, fontWeight: 700
                   }}>
-                    {s.label}
+                    {a.status === 'upcoming' && isPast ? 'Past Appointment' : s.label}
                   </span>
 
-                  {a.status === "upcoming" && (
+                  {a.status === "upcoming" && !isPast && (
                     <button
                       onClick={() => handleCancel(a.id)}
                       disabled={cancellingId === a.id}
@@ -264,6 +280,33 @@ export default function Appointment() {
                     >
                       {cancellingId === a.id ? "Cancelling..." : "Cancel"}
                     </button>
+                  )}
+
+                  {a.status === "upcoming" && isPast && (
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button
+                        onClick={() => handleUpdateStatus(a.id, "completed")}
+                        style={{
+                          padding: "6px 12px", borderRadius: 50,
+                          border: "1.5px solid #bfdbfe", background: "#eff6ff",
+                          color: "#1d4ed8", fontSize: 12, fontWeight: 600,
+                          cursor: "pointer", fontFamily: "'DM Sans', sans-serif"
+                        }}
+                      >
+                        ✓ Completed
+                      </button>
+                      <button
+                        onClick={() => handleUpdateStatus(a.id, "missed")}
+                        style={{
+                          padding: "6px 12px", borderRadius: 50,
+                          border: "1.5px solid #fde68a", background: "#fffbeb",
+                          color: "#b45309", fontSize: 12, fontWeight: 600,
+                          cursor: "pointer", fontFamily: "'DM Sans', sans-serif"
+                        }}
+                      >
+                        ✗ Missed
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>

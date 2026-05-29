@@ -9,12 +9,13 @@ export const getDashboardSummary = async (req, res) => {
   try {
     const patientId = req.user.id;
 
-    // 1. Count upcoming appointments
+    // 1. Count upcoming appointments (only future ones)
     const { count: upcomingApptsCount, error: apptError } = await supabase
       .from('appointments')
       .select('*', { count: 'exact', head: true })
       .eq('patient_id', patientId)
-      .eq('status', 'upcoming');
+      .eq('status', 'upcoming')
+      .gt('appointment_time', new Date().toISOString());
 
     if (apptError) throw apptError;
 
@@ -43,12 +44,13 @@ export const getDashboardSummary = async (req, res) => {
 
     if (treatmentError) throw treatmentError;
 
-    // 5. Fetch top 3 upcoming appointments for the snapshot
+    // 5. Fetch top 3 upcoming appointments (only future ones) for the snapshot
     const { data: upcomingAppointments, error: apptListError } = await supabase
       .from('appointments')
       .select('*')
       .eq('patient_id', patientId)
       .eq('status', 'upcoming')
+      .gt('appointment_time', new Date().toISOString())
       .order('appointment_time', { ascending: true })
       .limit(3);
 
@@ -68,7 +70,8 @@ export const getDashboardSummary = async (req, res) => {
         day,
         mon,
         time,
-        status: a.status
+        status: a.status,
+        appointment_time: a.appointment_time
       };
     });
 

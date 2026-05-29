@@ -32,7 +32,8 @@ export const getAppointments = async (req, res) => {
         day,
         mon,
         time,
-        status: a.status
+        status: a.status,
+        appointment_time: a.appointment_time
       };
     });
 
@@ -96,7 +97,8 @@ export const createAppointment = async (req, res) => {
       day,
       mon,
       time: timeFormatted,
-      status: newAppt.status
+      status: newAppt.status,
+      appointment_time: newAppt.appointment_time
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -143,7 +145,8 @@ export const updateAppointment = async (req, res) => {
       day,
       mon,
       time: timeFormatted,
-      status: updatedAppt.status
+      status: updatedAppt.status,
+      appointment_time: updatedAppt.appointment_time
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
