@@ -50,33 +50,57 @@ export const verifyMedicine = async (req, res) => {
     let expiry = "—";
     let color = "#fffbeb";
     let icon = "⚠️";
+    let status = "warning";
+    let brandName = null;
+    let source = "Unknown";
+    let dosageForm = null;
+    let strength = null;
 
-    // Matching mock rules from frontend
-    if (code.startsWith("MP") || code.startsWith("AT") || code.startsWith("AM") || code === "PA7788D" || code === "AM3344X") {
-      verified = true;
-      color = "#e8f5ee";
-      icon = "💊";
-      if (code.startsWith("MP")) {
-        finalName = "Metformin 500mg";
-        mfr = "Sun Pharma Ltd";
-        expiry = "Nov 2026";
-      } else if (code.startsWith("AT")) {
-        finalName = "Atorvastatin 20mg";
-        mfr = "Cipla Ltd";
-        expiry = "Aug 2026";
-      } else if (code.startsWith("AM") && code !== "AM3344X") {
-        finalName = "Amlodipine 5mg";
-        mfr = "Dr. Reddy's Laboratories";
-        expiry = "Mar 2027";
-      } else if (code === "PA7788D") {
-        finalName = "Paracetamol 500mg";
-        mfr = "GSK Consumer Healthcare";
-        expiry = "Dec 2027";
-      } else if (code === "AM3344X") {
-        finalName = "Amoxicillin 250mg";
-        mfr = "Abbott Laboratories";
-        expiry = "Sep 2026";
+    // Database lookup
+    const { data: batchMatch, error: lookupError } = await supabase
+      .from('medicine_batches')
+      .select('*')
+      .eq('batch_code', code)
+      .maybeSingle();
+
+    if (lookupError) {
+      return res.status(500).json({ error: lookupError.message });
+    }
+
+    if (batchMatch) {
+      finalName = batchMatch.medicine_name;
+      mfr = batchMatch.manufacturer;
+      brandName = batchMatch.brand_name;
+      source = batchMatch.source;
+      dosageForm = batchMatch.dosage_form;
+      strength = batchMatch.strength;
+
+      // Handle Date correctly
+      const expDate = new Date(batchMatch.expiry_date);
+      const now = new Date();
+      expiry = expDate.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+      
+      if (batchMatch.verification_status === 'recalled') {
+        verified = false;
+        status = 'recalled';
+        color = '#fee2e2'; // Light red
+        icon = '🚨';
+      } else if (expDate < now || batchMatch.verification_status === 'expired') {
+        verified = false;
+        status = 'expired';
+        color = '#ffedd5'; // Light orange
+        icon = '⏳';
+      } else {
+        verified = true;
+        status = 'verified';
+        color = '#e8f5ee'; // Light green
+        icon = '✅';
       }
+    } else {
+      status = 'warning';
+      color = '#fffbeb'; // Light yellow
+      icon = '⚠️';
+      verified = false;
     }
 
     // Insert verification scan into database
@@ -88,7 +112,12 @@ export const verifyMedicine = async (req, res) => {
         manufacturer: mfr,
         expiry,
         batch: code,
-        verified
+        verified,
+        status,
+        brand_name: brandName,
+        source,
+        dosage_form: dosageForm,
+        strength
       })
       .select()
       .single();
@@ -109,7 +138,12 @@ export const verifyMedicine = async (req, res) => {
       verified: newVerification.verified,
       date: formattedDate,
       icon,
-      color
+      color,
+      status: newVerification.status,
+      brandName: newVerification.brand_name,
+      source: newVerification.source,
+      dosageForm: newVerification.dosage_form,
+      strength: newVerification.strength
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -134,9 +168,22 @@ export const getVerificationHistory = async (req, res) => {
       const dateObj = new Date(v.verification_date);
       const formattedDate = dateObj.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 
-      const isFake = !v.verified;
-      const color = isFake ? "#fffbeb" : "#e8f5ee";
-      const icon = isFake ? "⚠️" : "💊";
+      // Determine colors and icons based on status, default to previous logic if status not set
+      let color = "#fffbeb";
+      let icon = "⚠️";
+      if (v.status === 'verified' || (v.verified && !v.status)) {
+        color = "#e8f5ee";
+        icon = "✅";
+      } else if (v.status === 'recalled') {
+        color = '#fee2e2';
+        icon = '🚨';
+      } else if (v.status === 'expired') {
+        color = '#ffedd5';
+        icon = '⏳';
+      } else if (v.status === 'warning' || !v.verified) {
+        color = "#fffbeb";
+        icon = "⚠️";
+      }
 
       return {
         id: v.id,
@@ -145,9 +192,14 @@ export const getVerificationHistory = async (req, res) => {
         expiry: v.expiry || '—',
         batch: v.batch,
         verified: v.verified,
+        status: v.status || (v.verified ? 'verified' : 'warning'),
         date: formattedDate,
         icon,
-        color
+        color,
+        brandName: v.brand_name,
+        source: v.source,
+        dosageForm: v.dosage_form,
+        strength: v.strength
       };
     });
 

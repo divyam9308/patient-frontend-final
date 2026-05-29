@@ -126,7 +126,7 @@ export default function MedicineVerification() {
                     disabled={scanning}
                   />
                   <small className="mv-input-tip">
-                    Note: Batch codes starting with 'MP', 'AT', 'AM' simulate a verified result.
+                    Note: Enter the exact batch/lot code printed on the medicine strip, bottle, or box.
                   </small>
                 </div>
                 <button type="submit" className="mv-verify-btn" disabled={!batchCode.trim() || scanning}>
@@ -143,11 +143,30 @@ export default function MedicineVerification() {
             )}
 
             {scanResult && (
-              <div className={`mv-result-card ${scanResult.verified ? "verified" : "fake"}`}>
+              <div className={`mv-result-card ${scanResult.status === 'verified' ? "verified" : "fake"}`} style={{ 
+                borderColor: scanResult.status === 'recalled' ? '#f87171' : 
+                             scanResult.status === 'expired' ? '#fb923c' : 
+                             scanResult.status === 'warning' ? '#facc15' : '#a7f3d0',
+                backgroundColor: scanResult.status === 'recalled' ? '#fef2f2' : 
+                                 scanResult.status === 'expired' ? '#fff7ed' : 
+                                 scanResult.status === 'warning' ? '#fefce8' : '#ecfdf5' 
+              }}>
                 <div className="mv-result-header">
-                  <span className="mv-result-badge">{scanResult.verified ? "✅ Genuine Product" : "🚨 Warning: Unverified"}</span>
+                  <span className="mv-result-badge" style={{
+                    color: scanResult.status === 'recalled' ? '#991b1b' : 
+                           scanResult.status === 'expired' ? '#9a3412' : 
+                           scanResult.status === 'warning' ? '#854d0e' : '#065f46',
+                    backgroundColor: scanResult.status === 'recalled' ? '#fee2e2' : 
+                                     scanResult.status === 'expired' ? '#ffedd5' : 
+                                     scanResult.status === 'warning' ? '#fef9c3' : '#d1fae5'
+                  }}>
+                    {scanResult.status === 'verified' ? "✅ Genuine Product" : 
+                     scanResult.status === 'recalled' ? "🚨 Recalled Product (Warning)" : 
+                     scanResult.status === 'expired' ? "⏳ Expired Product" : 
+                     "⚠️ Unverified / Unknown Batch"}
+                  </span>
                 </div>
-                <h3 className="mv-result-name">{scanResult.name}</h3>
+                <h3 className="mv-result-name">{scanResult.name} {scanResult.brandName && `(${scanResult.brandName})`}</h3>
                 <div className="mv-result-grid">
                   <div className="mv-result-item">
                     <span>Manufacturer</span>
@@ -162,15 +181,30 @@ export default function MedicineVerification() {
                     <strong>{scanResult.expiry}</strong>
                   </div>
                   <div className="mv-result-item">
-                    <span>Verification Date</span>
-                    <strong>{scanResult.date}</strong>
+                    <span>Format</span>
+                    <strong>{scanResult.dosageForm ? `${scanResult.strength} ${scanResult.dosageForm}` : '—'}</strong>
+                  </div>
+                  <div className="mv-result-item" style={{ gridColumn: '1 / -1' }}>
+                    <span>Data Source</span>
+                    <strong>{scanResult.source || 'Unknown Database'}</strong>
                   </div>
                 </div>
-                <p className="mv-result-desc">
-                  {scanResult.verified
-                    ? "This drug batch matches verified manufacturer manufacturing records and has been registered on the national medical blockchain registry."
+                <p className="mv-result-desc" style={{ 
+                    color: scanResult.status === 'recalled' ? '#991b1b' : 
+                           scanResult.status === 'expired' ? '#9a3412' : 
+                           scanResult.status === 'warning' ? '#854d0e' : '#065f46'
+                  }}>
+                  {scanResult.status === 'verified'
+                    ? "This drug batch matches verified manufacturer manufacturing records and has been registered on the national database."
+                    : scanResult.status === 'expired'
+                    ? "This medicine batch exists in our records but is expired. Do not use."
+                    : scanResult.status === 'recalled'
+                    ? "This medicine batch exists but has a recall/safety warning. Contact a medical professional immediately."
                     : "No matching record found for this batch identifier. This product may be counterfeited or unverified. Do not consume without professional advice."}
                 </p>
+                <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(0,0,0,0.1)', fontSize: '0.85rem', color: '#6b7280' }}>
+                  <strong>Medical Disclaimer</strong>: Verification is based only on records available in this database. If you suspect counterfeit medicine, contact a pharmacist, doctor, manufacturer, or local drug authority.
+                </div>
               </div>
             )}
           </div>
@@ -179,7 +213,7 @@ export default function MedicineVerification() {
           <div className="mv-history-card">
             <div className="mv-card-header">
               <h2 className="mv-section-title">🕒 Verification History</h2>
-              <span className="mv-meds-count">{medicines.length} verified</span>
+              <span className="mv-meds-count">{medicines.filter(m => m.verified).length} verified</span>
             </div>
             <p className="mv-history-desc">
               List of medicines previously verified on this account:
@@ -202,11 +236,22 @@ export default function MedicineVerification() {
                       Checked: {m.date}
                     </div>
                   </div>
-                  {m.verified ? (
-                    <div className="mv-pill verified">Verified</div>
-                  ) : (
-                    <div className="mv-pill fake">Unverified</div>
-                  )}
+                  <div className={`mv-pill ${
+                    m.status === 'verified' ? 'verified' : 
+                    (m.status === 'recalled' || m.status === 'expired' || m.status === 'warning') ? 'fake' : 'fake'
+                  }`} style={{
+                    backgroundColor: m.status === 'recalled' ? '#fee2e2' : 
+                                     m.status === 'expired' ? '#ffedd5' : 
+                                     m.status === 'warning' ? '#fef9c3' : undefined,
+                    color: m.status === 'recalled' ? '#991b1b' : 
+                           m.status === 'expired' ? '#9a3412' : 
+                           m.status === 'warning' ? '#854d0e' : undefined,
+                    border: 'none'
+                  }}>
+                    {m.status === 'verified' ? 'Verified' : 
+                     m.status === 'recalled' ? 'Recalled' : 
+                     m.status === 'expired' ? 'Expired' : 'Unverified'}
+                  </div>
                 </div>
               ))}
             </div>
