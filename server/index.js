@@ -26,7 +26,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ── Middleware ──────────────────────────────────────────
-app.use(cors({ origin: 'http://localhost:3000' })); // Allow React dev server
+app.use(cors({ origin: '*' })); // Allow all origins for local network testing
 app.use(express.json());
 
 // ── Routes ─────────────────────────────────────────────
@@ -44,6 +44,12 @@ app.get('/health', (req, res) => {
 });
 
 // ── Start Server ────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+// Vercel handles the port listening automatically in production
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+// Export the Express API for Vercel's serverless function
+export default app;

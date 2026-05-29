@@ -132,13 +132,13 @@ export const login = async (req, res) => {
     }
 
     if (!patient) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: 'Account not found. Please create an account.' });
     }
 
     // Verify password
     const isMatch = await bcrypt.compare(password, patient.password);
     if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
     // Generate JWT
@@ -166,7 +166,7 @@ export const login = async (req, res) => {
 // POST /api/auth/google-verify
 export const googleVerify = async (req, res) => {
   try {
-    const { credential } = req.body;
+    const { credential, isLogin } = req.body;
 
     if (!credential) {
       return res.status(400).json({ error: 'Google credential token is required' });
@@ -191,8 +191,12 @@ export const googleVerify = async (req, res) => {
       return res.status(500).json({ error: fetchError.message });
     }
 
-    // If user does not exist, auto-register them
+    // If user does not exist, handle based on isLogin flag
     if (!patient) {
+      if (isLogin) {
+        return res.status(404).json({ error: 'Account not found. Please create an account.' });
+      }
+
       // Generate a secure random password hash
       const randomPassword = Math.random().toString(36).slice(-10) + Date.now().toString();
       const salt = await bcrypt.genSalt(10);

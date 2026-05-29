@@ -1,7 +1,9 @@
 // src/utils/api.js
 // API helper utility to perform fetch requests to the Express backend
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? '/api' 
+  : (process.env.REACT_APP_API_URL || `http://${window.location.hostname}:5000/api`);
 
 const getHeaders = () => {
   const token = localStorage.getItem('token') || sessionStorage.getItem('token');
@@ -17,6 +19,17 @@ const getHeaders = () => {
 const handleResponse = async (response) => {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (
+      response.status === 401 ||
+      response.status === 403 ||
+      data.error === 'Patient not found'
+    ) {
+      localStorage.removeItem('token');
+      sessionStorage.removeItem('token');
+      localStorage.removeItem('user');
+      sessionStorage.removeItem('user');
+      window.location.href = '/login';
+    }
     throw new Error(data.error || 'Something went wrong');
   }
   return data;

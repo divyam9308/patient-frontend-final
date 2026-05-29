@@ -235,6 +235,15 @@ function ProfileTab() {
   const emergency = user?.emergency || user?.emergency_contact || '—';
   const aadhar = user?.aadhar || '—';
 
+  const formatDOB = (dob) => {
+    if (!dob) return '—';
+    const parts = dob.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]} ${parts[1]} ${parts[0]}`;
+    }
+    return dob;
+  };
+
   return (
     <div>
       {saveMsg && (
@@ -254,11 +263,11 @@ function ProfileTab() {
           <div className="db-profile-tags">
             <span className="db-profile-tag">🩸 {bloodGroup}</span>
             <span className="db-profile-tag">👤 {user?.gender || '—'}</span>
-            <span className="db-profile-tag">🎂 {user?.dob || '—'}</span>
+            <span className="db-profile-tag">🎂 {formatDOB(user?.dob)}</span>
             <span className="db-profile-tag">✅ Verified Patient</span>
           </div>
         </div>
-        <button className="db-edit-btn" style={{ background: "rgba(255,255,255,0.15)", border: "1.5px solid rgba(255,255,255,0.35)", color: "white" }} onClick={handleEdit}>
+        <button className="db-edit-btn" style={{ background: "rgba(255,255,255,0.15)", border: "1.5px solid rgba(255,255,255,0.35)", color: "white", position: "relative", zIndex: 2 }} onClick={handleEdit}>
           ✏️ Edit Profile
         </button>
       </div>
@@ -270,24 +279,86 @@ function ProfileTab() {
           </div>
           <div className="db-info-grid">
             {[
-              { label: 'Full Name', key: 'name' },
-              { label: 'Phone', key: 'phone' },
-              { label: 'Date of Birth', key: 'dob' },
-              { label: 'Gender', key: 'gender' },
-              { label: 'Blood Group', key: 'bloodGroup' },
-              { label: 'Address', key: 'address' },
-              { label: 'Aadhar', key: 'aadhar' },
-              { label: 'Emergency Contact', key: 'emergency' },
-            ].map(f => (
-              <div key={f.key} className="db-info-item">
-                <div className="db-info-label">{f.label}</div>
-                <input
-                  style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1.5px solid #d4e8da', fontSize: 13, fontFamily: 'inherit' }}
-                  value={form[f.key] || ''}
-                  onChange={e => setForm({ ...form, [f.key]: e.target.value })}
-                />
-              </div>
-            ))}
+              { label: 'Full Name', key: 'name', type: 'text' },
+              { label: 'Phone', key: 'phone', type: 'text', maxLength: 10, pattern: /^\d*$/ },
+              { label: 'Date of Birth', key: 'dob', type: 'date' },
+              { label: 'Gender', key: 'gender', type: 'select', options: ['Male', 'Female', 'Other', 'Prefer not to say'] },
+              { label: 'Blood Group', key: 'bloodGroup', type: 'select', options: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] },
+              { label: 'Address', key: 'address', type: 'text' },
+              { label: 'Aadhar', key: 'aadhar', type: 'text', maxLength: 12, pattern: /^\d*$/ },
+              { label: 'Emergency Contact', key: 'emergency', type: 'text', maxLength: 10, pattern: /^\d*$/ },
+            ].map(f => {
+              const value = form[f.key] || '';
+              return (
+                <div key={f.key} className="db-info-item">
+                  <div className="db-info-label" style={{ marginBottom: 4 }}>{f.label}</div>
+                  {f.type === 'select' ? (
+                    <select
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #d4e8da', fontSize: 13, fontFamily: 'inherit', background: 'white' }}
+                      value={value}
+                      onChange={e => setForm({ ...form, [f.key]: e.target.value })}
+                    >
+                      <option value="">Select {f.label}</option>
+                      {f.options.map(opt => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  ) : f.maxLength ? (
+                    <div style={{ position: 'relative', width: '100%' }}>
+                      <input
+                        type={f.type}
+                        maxLength={f.maxLength}
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          border: '1.5px solid #d4e8da',
+                          fontSize: 14,
+                          fontFamily: 'monospace',
+                          letterSpacing: '2px',
+                          background: 'transparent',
+                          position: 'relative',
+                          zIndex: 2,
+                          color: '#1e3a2f',
+                          fontWeight: '700'
+                        }}
+                        value={value}
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (f.pattern && !f.pattern.test(val)) return;
+                          setForm({ ...form, [f.key]: val });
+                        }}
+                      />
+                      <div
+                        style={{
+                          position: 'absolute',
+                          left: 13,
+                          top: 11,
+                          fontSize: 14,
+                          fontFamily: 'monospace',
+                          letterSpacing: '2px',
+                          color: '#cbd5e1',
+                          pointerEvents: 'none',
+                          zIndex: 1,
+                          fontWeight: '700',
+                          whiteSpace: 'pre'
+                        }}
+                      >
+                        <span style={{ color: 'transparent' }}>{value}</span>
+                        {'X'.repeat(Math.max(0, f.maxLength - value.length))}
+                      </div>
+                    </div>
+                  ) : (
+                    <input
+                      type={f.type}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #d4e8da', fontSize: 13, fontFamily: 'inherit' }}
+                      value={value}
+                      onChange={e => setForm({ ...form, [f.key]: e.target.value })}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
           <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
             <button className="db-new-appt-btn" style={{ margin: 0 }} onClick={handleSave} disabled={saving}>

@@ -123,19 +123,36 @@ export const updatePatientProfile = async (req, res) => {
   try {
     const { name, phone, dob, gender, bloodGroup, address, aadhar, emergency } = req.body;
 
+    let initials;
+    if (name) {
+      initials = name
+        .split(' ')
+        .filter(Boolean)
+        .map(part => part[0])
+        .join('')
+        .toUpperCase()
+        .substring(0, 3) || 'P';
+    }
+
+    const updateFields = {
+      name,
+      phone,
+      dob,
+      gender,
+      blood_group: bloodGroup,
+      address,
+      aadhar,
+      emergency_contact: emergency,
+      updated_at: new Date().toISOString()
+    };
+
+    if (initials) {
+      updateFields.initials = initials;
+    }
+
     const { data: updatedPatient, error } = await supabase
       .from('patients')
-      .update({
-        name,
-        phone,
-        dob,
-        gender,
-        blood_group: bloodGroup,
-        address,
-        aadhar,
-        emergency_contact: emergency,
-        updated_at: new Date()
-      })
+      .update(updateFields)
       .eq('id', req.user.id)
       .select()
       .single();

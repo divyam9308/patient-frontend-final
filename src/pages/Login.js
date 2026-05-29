@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../utils/api.js";
 import "./Auth.css";
@@ -9,23 +9,17 @@ export default function Login() {
   // Remember Me state initialization
   const [rememberMe, setRememberMe] = useState(() => {
     const saved = localStorage.getItem('rememberMe');
-    return saved === null ? true : saved === 'true'; // Default to checked/true
+    return saved === null ? true : saved === 'true';
   });
 
   const [form, setForm] = useState({ 
     email: localStorage.getItem('rememberedEmail') || "", 
-    password: localStorage.getItem('rememberedPassword') || "" 
+    password: "" 
   });
   
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-
-  // OTP states
-  const [isOtpMode, setIsOtpMode] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
-  const [otp, setOtp] = useState("");
 
   const handleChange = (e) =>
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -39,40 +33,31 @@ export default function Login() {
     }
   }, [navigate]);
 
-  // Handle Google SDK Load
-  useEffect(() => {
-    // Check if script is already loaded
-    if (window.google) {
-      initGoogle();
+  const finishLogin = useCallback((response) => {
+    if (rememberMe) {
+      localStorage.setItem('token', response.token);
+      localStorage.setItem('user', JSON.stringify(response.user));
+      localStorage.setItem('rememberedEmail', form.email);
+      localStorage.setItem('rememberMe', 'true');
     } else {
-      // Add event listener in case it loads later
-      const script = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
-      if (script) {
-        script.addEventListener('load', initGoogle);
-      }
+      sessionStorage.setItem('token', response.token);
+      sessionStorage.setItem('user', JSON.stringify(response.user));
+      localStorage.removeItem('rememberedEmail');
+      localStorage.setItem('rememberMe', 'false');
     }
-    
-    function initGoogle() {
-      window.google.accounts.id.initialize({
-        client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID || '1234567890-example.apps.googleusercontent.com',
-        callback: handleGoogleResponse
-      });
-      window.google.accounts.id.renderButton(
-        document.getElementById("google-signIn-btn"),
-        { theme: "outline", size: "large", width: 250 }
-      );
-    }
-  }, []);
+    navigate("/dashboard");
+  }, [rememberMe, form.email, navigate]);
 
-  const handleGoogleResponse = async (response) => {
+  // Google Sign-In callback
+  const handleGoogleResponse = useCallback(async (response) => {
     setLoading(true);
     setError("");
     try {
       const res = await api.post('/auth/google-verify', {
-        credential: response.credential
+        credential: response.credential,
+        isLogin: true
       });
 
-      // Google Sign-In always remembers the user
       localStorage.setItem('token', res.token);
       localStorage.setItem('user', JSON.stringify(res.user));
       localStorage.setItem('rememberMe', 'true');
@@ -83,53 +68,59 @@ export default function Login() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate]);
+
+  // Handle Google SDK Load — robust with polling fallback
+  useEffect(() => {
+    const initGoogle = () => {
+      if (!window.google) return false;
+      try {
+        window.google.accounts.id.initialize({
+          client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID || '1234567890-example.apps.googleusercontent.com',
+          callback: handleGoogleResponse
+        });
+        const btnEl = document.getElementById("google-signIn-btn");
+        if (btnEl) {
+          window.google.accounts.id.renderButton(btnEl, {
+            theme: "outline", size: "large", width: 250
+          });
+        }
+        return true;
+      } catch (e) {
+        console.error("Google Sign-In init error:", e);
+        return false;
+      }
+    };
+
+    if (initGoogle()) return;
+
+    // Poll until Google SDK loads
+    const checkGoogle = setInterval(() => {
+      if (initGoogle()) {
+        clearInterval(checkGoogle);
+      }
+    }, 300);
+
+    const timeout = setTimeout(() => clearInterval(checkGoogle), 10000);
+    return () => {
+      clearInterval(checkGoogle);
+      clearTimeout(timeout);
+    };
+  }, [handleGoogleResponse]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError("");
-    setSuccess("");
     
     try {
-      if (isOtpMode) {
-        if (!otpSent) {
-          // Send OTP
-          await api.post('/auth/send-otp', { email: form.email });
-          setOtpSent(true);
-          setSuccess("Passcode sent to your email!");
-        } else {
-          // Verify OTP
-          const response = await api.post('/auth/verify-otp', { email: form.email, otp });
-          finishLogin(response);
-        }
-      } else {
-        // Normal Password Login
-        const response = await api.post('/auth/login', form);
-        finishLogin(response);
-      }
+      const response = await api.post('/auth/login', form);
+      finishLogin(response);
     } catch (err) {
       setError(err.message || "Authentication failed");
     } finally {
       setLoading(false);
     }
-  };
-
-  const finishLogin = (response) => {
-    if (rememberMe) {
-      localStorage.setItem('token', response.token);
-      localStorage.setItem('user', JSON.stringify(response.user));
-      localStorage.setItem('rememberedEmail', form.email);
-      localStorage.setItem('rememberedPassword', form.password);
-      localStorage.setItem('rememberMe', 'true');
-    } else {
-      sessionStorage.setItem('token', response.token);
-      sessionStorage.setItem('user', JSON.stringify(response.user));
-      localStorage.removeItem('rememberedEmail');
-      localStorage.removeItem('rememberedPassword');
-      localStorage.setItem('rememberMe', 'false');
-    }
-    navigate("/dashboard");
   };
 
   return (
@@ -231,15 +222,6 @@ export default function Login() {
                 ⚠️ {error}
               </div>
             )}
-            {success && (
-              <div className="auth-error-msg" style={{
-                color: "#059669", background: "#d1fae5", padding: "10px 14px",
-                borderRadius: "10px", border: "1px solid #a7f3d0", fontSize: "13px",
-                marginBottom: "16px", textAlign: "left", fontWeight: 500
-              }}>
-                ✅ {success}
-              </div>
-            )}
 
             <form className="auth-form" onSubmit={handleSubmit}>
               <div className="field-group">
@@ -259,64 +241,41 @@ export default function Login() {
                     onChange={handleChange}
                     className="field-input"
                     required
-                    disabled={otpSent}
                   />
                 </div>
               </div>
 
-              {!isOtpMode ? (
-                <div className="field-group">
-                  <label className="field-label">Password</label>
-                  <div className="field-wrap">
-                    <span className="field-icon">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                        <path d="M7 11V7a5 5 0 0110 0v4"/>
-                      </svg>
-                    </span>
-                    <input
-                      type={showPass ? "text" : "password"}
-                      name="password"
-                      placeholder="Enter your password"
-                      value={form.password}
-                      onChange={handleChange}
-                      className="field-input"
-                      required={!isOtpMode}
-                    />
-                    <button
-                      type="button"
-                      className="toggle-pass"
-                      onClick={() => setShowPass(!showPass)}
-                    >
-                      {showPass ? (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                      ) : (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                      )}
-                    </button>
-                  </div>
+              <div className="field-group">
+                <label className="field-label">Password</label>
+                <div className="field-wrap">
+                  <span className="field-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                      <path d="M7 11V7a5 5 0 0110 0v4"/>
+                    </svg>
+                  </span>
+                  <input
+                    type={showPass ? "text" : "password"}
+                    name="password"
+                    placeholder="Enter your password"
+                    value={form.password}
+                    onChange={handleChange}
+                    className="field-input"
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="toggle-pass"
+                    onClick={() => setShowPass(!showPass)}
+                  >
+                    {showPass ? (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                    ) : (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    )}
+                  </button>
                 </div>
-              ) : otpSent && (
-                <div className="field-group">
-                  <label className="field-label">6-Digit Passcode</label>
-                  <div className="field-wrap">
-                    <span className="field-icon">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                      </svg>
-                    </span>
-                    <input
-                      type="text"
-                      name="otp"
-                      placeholder="Enter the passcode from your email"
-                      value={otp}
-                      onChange={(e) => setOtp(e.target.value)}
-                      className="field-input"
-                      required
-                    />
-                  </div>
-                </div>
-              )}
+              </div>
 
               <div className="form-options">
                 <label className="remember-label">
@@ -329,7 +288,7 @@ export default function Login() {
                   <span className="check-custom" />
                   Remember me
                 </label>
-                {!isOtpMode && <a href="/forgot" className="forgot-link">Forgot password?</a>}
+                <a href="/forgot" className="forgot-link">Forgot password?</a>
               </div>
 
               <button
@@ -340,33 +299,10 @@ export default function Login() {
                 {loading ? (
                   <span className="spinner" />
                 ) : (
-                  <>
-                    {isOtpMode 
-                      ? (otpSent ? "Verify & Sign In" : "Send Passcode") 
-                      : "Sign In"
-                    } <span className="btn-arrow">→</span>
-                  </>
+                  <>Sign In <span className="btn-arrow">→</span></>
                 )}
               </button>
             </form>
-
-            <div style={{ marginTop: "16px", textAlign: "center" }}>
-              <button 
-                type="button" 
-                onClick={() => {
-                  setIsOtpMode(!isOtpMode);
-                  setOtpSent(false);
-                  setError("");
-                  setSuccess("");
-                }}
-                style={{
-                  background: "none", border: "none", color: "#4285F4", 
-                  fontWeight: 600, cursor: "pointer", fontSize: "14px"
-                }}
-              >
-                {isOtpMode ? "Sign in with Password instead" : "Sign in with Email Passcode"}
-              </button>
-            </div>
 
             <div className="divider"><span>or continue with</span></div>
 
