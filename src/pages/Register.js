@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../utils/api.js";
 import "./Auth.css";
@@ -57,38 +57,16 @@ export default function Register() {
     }
   };
 
-  // Handle Google SDK Load
-  useEffect(() => {
-    if (window.google) {
-      initGoogle();
-    } else {
-      const script = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
-      if (script) {
-        script.addEventListener('load', initGoogle);
-      }
-    }
-    
-    function initGoogle() {
-      window.google.accounts.id.initialize({
-        client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID || '1234567890-example.apps.googleusercontent.com',
-        callback: handleGoogleResponse
-      });
-      window.google.accounts.id.renderButton(
-        document.getElementById("google-signUp-btn"),
-        { theme: "outline", size: "large", width: 250 }
-      );
-    }
-  }, []);
-
-  const handleGoogleResponse = async (response) => {
+  // Google Sign-In callback
+  const handleGoogleResponse = useCallback(async (response) => {
     setLoading(true);
     setError("");
     try {
       const res = await api.post('/auth/google-verify', {
-        credential: response.credential
+        credential: response.credential,
+        isLogin: false
       });
 
-      // Default session storage for register flow
       localStorage.setItem('token', res.token);
       localStorage.setItem('user', JSON.stringify(res.user));
       localStorage.setItem('rememberMe', 'true');
@@ -99,7 +77,44 @@ export default function Register() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate]);
+
+  // Handle Google SDK Load — robust with polling fallback
+  useEffect(() => {
+    const initGoogle = () => {
+      if (!window.google) return false;
+      try {
+        window.google.accounts.id.initialize({
+          client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID || '1234567890-example.apps.googleusercontent.com',
+          callback: handleGoogleResponse
+        });
+        const btnEl = document.getElementById("google-signUp-btn");
+        if (btnEl) {
+          window.google.accounts.id.renderButton(btnEl, {
+            theme: "outline", size: "large", width: 250
+          });
+        }
+        return true;
+      } catch (e) {
+        console.error("Google Sign-In init error:", e);
+        return false;
+      }
+    };
+
+    if (initGoogle()) return;
+
+    const checkGoogle = setInterval(() => {
+      if (initGoogle()) {
+        clearInterval(checkGoogle);
+      }
+    }, 300);
+
+    const timeout = setTimeout(() => clearInterval(checkGoogle), 10000);
+    return () => {
+      clearInterval(checkGoogle);
+      clearTimeout(timeout);
+    };
+  }, [handleGoogleResponse]);
 
   const strength = (() => {
     const p = form.password;

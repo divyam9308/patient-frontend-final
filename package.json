@@ -15,6 +15,8 @@
   },
   "scripts": {
     "start": "react-scripts start",
+    "server": "cd server && npm run dev",
+    "dev": "concurrently \"npm start\" \"npm run server\"",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
@@ -36,5 +38,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.0"
   }
 }
