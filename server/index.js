@@ -44,6 +44,12 @@ app.get('/health', (req, res) => {
 });
 
 // ── Start Server ────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+// Vercel handles the port listening automatically in production
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+// Export the Express API for Vercel's serverless function
+export default app;
