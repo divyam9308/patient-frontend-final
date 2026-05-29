@@ -17,6 +17,17 @@ const getHeaders = () => {
 const handleResponse = async (response) => {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (
+      response.status === 401 ||
+      response.status === 403 ||
+      data.error === 'Patient not found'
+    ) {
+      localStorage.removeItem('token');
+      sessionStorage.removeItem('token');
+      localStorage.removeItem('user');
+      sessionStorage.removeItem('user');
+      window.location.href = '/login';
+    }
     throw new Error(data.error || 'Something went wrong');
   }
   return data;

@@ -492,6 +492,7 @@
   width: 260px; height: 260px;
   border-radius: 50%;
   background: rgba(255,255,255,0.06);
+  pointer-events: none;
 }
 .db-profile-avatar-wrap { position: relative; }
 .db-profile-avatar {
