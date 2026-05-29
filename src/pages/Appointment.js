@@ -274,11 +274,11 @@ export default function Appointment() {
       <div className="db-page-subtitle">Your upcoming and past appointments</div>
 
       {/* Action buttons */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 28, flexWrap: "wrap" }}>
-        <button className="db-new-appt-btn" onClick={() => openModal(false)}>
-          + Book New Appointment
+      <div style={{ display: "flex", gap: 12, marginBottom: 28, flexWrap: "wrap", justifyContent: "space-between" }}>
+        <button className="db-new-appt-btn" onClick={() => openModal(false)} style={{ margin: 0 }}>
+          + Book Follow Up Appointment
         </button>
-        <button className="appt-emergency-trigger-btn" onClick={() => openModal(true)}>
+        <button className="appt-emergency-trigger-btn" onClick={() => openModal(true)} style={{ margin: 0 }}>
           🚨 Emergency Booking
         </button>
       </div>
