@@ -137,3 +137,22 @@ CREATE TABLE IF NOT EXISTS treatment_diary_logs (
   log_text        TEXT NOT NULL,
   logged_at       TIMESTAMP DEFAULT NOW()
 );
+
+-- ────────────────────────────────────────────────
+-- MIGRATION: Appointment Booking Enhancements (branch: Appointment)
+-- Run these statements if your appointments table was already created
+-- before this update. Safe to run multiple times (IF NOT EXISTS).
+-- ────────────────────────────────────────────────
+
+-- 1. City preference for appointment
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS city TEXT;
+
+-- 2. Hospital name selected during multi-step booking
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS hospital_name TEXT;
+
+-- 3. Flag for high-alert emergency appointments
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS is_emergency BOOLEAN DEFAULT false;
+
+-- ─────────────────────────────────────────────────
+-- HOW TO RUN: Supabase Dashboard → SQL Editor → New Query → paste → Run
+-- ─────────────────────────────────────────────────

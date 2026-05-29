@@ -1,6 +1,7 @@
 // routes/appointmentRoutes.js
 // Routes for Appointment.js page
 // Handles: list appointments, book new appointment, cancel/update appointment
+// NEW: /meta, /available-slots, /recommendations
 
 import express from 'express';
 import authenticateToken from '../middleware/authMiddleware.js';
@@ -9,12 +10,24 @@ import {
   createAppointment,
   updateAppointment,
   deleteAppointment,
+  getAppointmentMeta,
+  getAvailableSlots,
+  getRecommendations,
 } from '../controllers/appointmentController.js';
 
 const router = express.Router();
 
 // All appointment routes require authentication
 router.use(authenticateToken);
+
+// GET  /api/appointments/meta               → City/Hospital/Dept/Doctor hierarchy
+router.get('/meta', getAppointmentMeta);
+
+// GET  /api/appointments/available-slots    → Available time slots for a doctor on a date
+router.get('/available-slots', getAvailableSlots);
+
+// GET  /api/appointments/recommendations    → Alternate hospital recommendations
+router.get('/recommendations', getRecommendations);
 
 // GET    /api/appointments         → Get all appointments for logged-in patient
 router.get('/', getAppointments);

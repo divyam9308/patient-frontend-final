@@ -173,7 +173,14 @@ export default function PrioritySystem() {
   const details = getSeverityDetails(severity);
 
   const handleBookAppointment = () => {
-    navigate("/appointments");
+    // For critical patients (severity >= 70) open emergency booking directly
+    if (severity >= 70) {
+      navigate("/appointments", {
+        state: { openEmergency: true, severityScore: severity, severityLabel: "Critical" },
+      });
+    } else {
+      navigate("/appointments");
+    }
   };
 
   return (
