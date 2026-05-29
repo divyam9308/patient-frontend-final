@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../components/DashboardLayout";
-import { api } from "../utils/api.js";
+import { api, submitTriage } from "../utils/api.js";
 import './Dashboard.css';
 import "./PrioritySystem.css";
 
@@ -114,6 +114,7 @@ export default function PrioritySystem() {
   const [loading, setLoading] = useState(false);
   const [animating, setAnimating] = useState(false);
   const [showMore, setShowMore] = useState(false);
+  const [triageResult, setTriageResult] = useState(null);
 
   const visibleSymptoms = showMore ? ALL_SYMPTOMS : CORE_SYMPTOMS;
 
@@ -151,16 +152,26 @@ export default function PrioritySystem() {
         return s ? s.label : '';
       }).filter(Boolean);
 
-      // Save triage request to backend
+      // Submit to backend triage API
+      let triageData = null;
       try {
-        await api.post('/priority', {
-          symptoms: symptomLabels,
-          severityScore: pct,
-          severityLabel: severityDetails.label,
+        triageData = await submitTriage({
+          symptoms: symptomLabels.join(', '),
+          symptomDuration: duration,
         });
+        setTriageResult(triageData);
       } catch (err) {
-        // Non-blocking — continue showing results even if save fails
-        console.warn('Priority save failed:', err.message);
+        console.warn('Triage API call failed, falling back to local classification:', err.message);
+        // Fallback: also save to old priority endpoint
+        try {
+          await api.post('/priority', {
+            symptoms: symptomLabels,
+            severityScore: pct,
+            severityLabel: severityDetails.label,
+          });
+        } catch (e) {
+          console.warn('Priority save also failed:', e.message);
+        }
       }
 
       setSeverity(pct);
@@ -173,13 +184,29 @@ export default function PrioritySystem() {
   const details = getSeverityDetails(severity);
 
   const handleBookAppointment = () => {
-    // For critical patients (severity >= 70) open emergency booking directly
+    // Use the backend triage result if available
+    if (triageResult) {
+      const { severity_result, triage_id, recommended_department_id } = triageResult;
+
+      if (severity_result === 'emergency') {
+        navigate('/emergency-booking', {
+          state: { triage_id, recommended_department_id }
+        });
+      } else if (severity_result === 'priority') {
+        navigate(`/appointments?mode=priority&triage_id=${triage_id}${recommended_department_id ? `&dept=${recommended_department_id}` : ''}`);
+      } else {
+        navigate(`/appointments?mode=regular&triage_id=${triage_id}${recommended_department_id ? `&dept=${recommended_department_id}` : ''}`);
+      }
+      return;
+    }
+
+    // Fallback to local severity score if triage API was unavailable
     if (severity >= 70) {
-      navigate("/appointments", {
-        state: { openEmergency: true, severityScore: severity, severityLabel: "Critical" },
-      });
+      navigate('/emergency-booking');
+    } else if (severity >= 40) {
+      navigate('/appointments?mode=priority');
     } else {
-      navigate("/appointments");
+      navigate('/appointments?mode=regular');
     }
   };
 

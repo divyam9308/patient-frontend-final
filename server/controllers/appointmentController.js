@@ -177,7 +177,7 @@ export const getAppointments = async (req, res) => {
         appointment_date,
         appointment_time,
         status,
-        is_emergency,
+        appointment_type,
         doctor_hospitals (
           doctors (name, departments(name)),
           hospitals (name, cities(name))
@@ -199,7 +199,7 @@ export const getAppointments = async (req, res) => {
         dept: docHosp?.doctors?.departments?.name,
         city: docHosp?.hospitals?.cities?.name,
         hospital: docHosp?.hospitals?.name,
-        is_emergency: a.is_emergency,
+        appointment_type: a.appointment_type,
         day: dateObj.getDate().toString().padStart(2, '0'),
         mon: dateObj.toLocaleString('en-US', { month: 'short' }).toUpperCase(),
         time: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
@@ -221,18 +221,38 @@ export const getAppointments = async (req, res) => {
 export const createAppointment = async (req, res) => {
   try {
     const patientId = req.user.id;
-    const { doctor_hospital_id, appointment_date, appointment_time, reason, is_emergency } = req.body;
+    const { doctor_hospital_id, appointment_date, appointment_time, reason, appointment_type, triage_id } = req.body;
 
-    if (!doctor_hospital_id || !appointment_date || !appointment_time) {
-      return res.status(400).json({ error: 'doctor_hospital_id, appointment_date, and appointment_time are required' });
+    if (!doctor_hospital_id || !appointment_date || !appointment_time || !appointment_type) {
+      return res.status(400).json({ error: 'doctor_hospital_id, appointment_date, appointment_time, and appointment_type are required' });
     }
 
-    // Past date/time validation for non-emergency
+    if (appointment_type === 'emergency') {
+      return res.status(400).json({ error: 'Emergency appointments cannot be booked through this endpoint. Use /api/emergency-requests instead.' });
+    }
+
+    if ((appointment_type === 'regular' || appointment_type === 'priority') && !triage_id) {
+      return res.status(400).json({ error: 'triage_id is required for regular and priority appointments.' });
+    }
+
     const appointmentTime = new Date(`${appointment_date}T${appointment_time}`);
-    if (!is_emergency && appointmentTime <= new Date()) {
+    
+    if (appointmentTime <= new Date()) {
       return res.status(400).json({
         error: 'Cannot book an appointment in the past. Please choose a future date and time.',
       });
+    }
+
+    if (appointment_type === 'follow_up') {
+      const sevenDaysFromNow = new Date();
+      sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+      
+      // Zero out time for just date comparison if desired, but fine as is
+      if (appointmentTime < sevenDaysFromNow) {
+        return res.status(400).json({
+          error: 'Follow-up appointments must be scheduled at least 7 days in advance.',
+        });
+      }
     }
 
     const { data: newAppt, error } = await supabase
@@ -243,11 +263,12 @@ export const createAppointment = async (req, res) => {
         appointment_date,
         appointment_time,
         reason,
-        is_emergency: !!is_emergency,
+        appointment_type,
+        triage_id,
         status: 'upcoming'
       })
       .select(`
-        id, appointment_date, appointment_time, status, is_emergency,
+        id, appointment_date, appointment_time, status, appointment_type,
         doctor_hospitals (
           doctors (name, departments(name)),
           hospitals (name, cities(name))
@@ -271,7 +292,7 @@ export const createAppointment = async (req, res) => {
       dept: docHosp?.doctors?.departments?.name,
       city: docHosp?.hospitals?.cities?.name,
       hospital: docHosp?.hospitals?.name,
-      is_emergency: newAppt.is_emergency,
+      appointment_type: newAppt.appointment_type,
       day: dateObj.getDate().toString().padStart(2, '0'),
       mon: dateObj.toLocaleString('en-US', { month: 'short' }).toUpperCase(),
       time: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),

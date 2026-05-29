@@ -41,6 +41,10 @@ export default function DashboardLayout({ children, activeTab, onTabChange }) {
     { id: "symptom",       icon: "🩺", label: "Symptom Analyser" },
   ];
 
+  if (user.role === 'Doctor' || localStorage.getItem('doctorMode') === 'true') {
+    navItems.push({ id: "alerts", icon: "🚨", label: "Emergency Alerts", badge: "Live" });
+  }
+
   const handleNavClick = (item) => {
     if (item.id === "symptom") {
       navigate("/priority-system");
@@ -59,6 +63,12 @@ export default function DashboardLayout({ children, activeTab, onTabChange }) {
         navigate("/dashboard", { state: { tab: item.id } });
       }
     }
+  };
+
+  const toggleDoctorMode = () => {
+    const isDoc = localStorage.getItem('doctorMode') === 'true';
+    localStorage.setItem('doctorMode', !isDoc ? 'true' : 'false');
+    window.location.reload();
   };
 
   return (
@@ -80,6 +90,17 @@ export default function DashboardLayout({ children, activeTab, onTabChange }) {
           </div>
         </div>
         <div className="db-nav-right">
+          <button 
+            onClick={toggleDoctorMode}
+            style={{ 
+              marginRight: '10px', padding: '4px 8px', borderRadius: '4px', 
+              background: localStorage.getItem('doctorMode') === 'true' ? '#dc2626' : '#f3f4f6', 
+              color: localStorage.getItem('doctorMode') === 'true' ? 'white' : '#4b5563', 
+              border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' 
+            }}
+          >
+            {localStorage.getItem('doctorMode') === 'true' ? '🩺 Doc Mode ON' : '🩺 Doc Mode OFF'}
+          </button>
           <div className="db-nav-icon-btn" title="Notifications">
             🔔
             <span className="db-notif-dot" />
