@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import DashboardLayout from "../components/DashboardLayout";
 import { 
   getCities, 
   getDepartmentsByCity, 
   getHospitalsByCityAndDepartment,
+  getTriageRequest,
   createEmergencyRequest
 } from "../utils/api.js";
 import "./EmergencyBooking.css";
@@ -12,16 +13,22 @@ import "./EmergencyBooking.css";
 export default function EmergencyBooking() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   // From triage redirect
-  const { triage_id, recommended_department_id } = location.state || {};
+  const {
+    triage_id: stateTriageId,
+    recommended_department_id: stateRecommendedDepartmentId
+  } = location.state || {};
+  const triageId = stateTriageId || searchParams.get("triage_id");
+  const recommendedDepartmentId = stateRecommendedDepartmentId || searchParams.get("dept");
 
   const [cities, setCities] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [hospitals, setHospitals] = useState([]);
   
   const [selectedCity, setSelectedCity] = useState("");
-  const [selectedDept, setSelectedDept] = useState(recommended_department_id || "");
+  const [selectedDept, setSelectedDept] = useState(recommendedDepartmentId || "");
   const [selectedHospital, setSelectedHospital] = useState("");
   
   const [patientLocation, setPatientLocation] = useState("");
@@ -30,24 +37,33 @@ export default function EmergencyBooking() {
   const [pickupLocation, setPickupLocation] = useState("");
 
   const [loading, setLoading] = useState(false);
+  const [triageRequest, setTriageRequest] = useState(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    if (!triage_id) {
+    if (!triageId) {
       // Must come through triage first for emergency
       navigate('/symptom-analyser');
       return;
     }
     getCities().then(setCities).catch(console.error);
-  }, [triage_id, navigate]);
+    getTriageRequest(triageId)
+      .then(data => {
+        setTriageRequest(data);
+        if (!recommendedDepartmentId && data.recommended_department_id) {
+          setSelectedDept(data.recommended_department_id);
+        }
+      })
+      .catch(err => setError(err.message || "Unable to load triage details"));
+  }, [triageId, navigate, recommendedDepartmentId]);
 
   useEffect(() => {
-    setSelectedDept(recommended_department_id || "");
+    setSelectedDept(recommendedDepartmentId || triageRequest?.recommended_department_id || "");
     setDepartments([]);
     if (!selectedCity) return;
     getDepartmentsByCity(selectedCity).then(setDepartments).catch(console.error);
-  }, [selectedCity, recommended_department_id]);
+  }, [selectedCity, recommendedDepartmentId, triageRequest]);
 
   useEffect(() => {
     setSelectedHospital("");
@@ -63,7 +79,7 @@ export default function EmergencyBooking() {
 
     try {
       await createEmergencyRequest({
-        triage_id,
+        triage_id: triageId,
         city_id: selectedCity,
         department_id: selectedDept,
         hospital_id: selectedHospital,
@@ -109,6 +125,20 @@ export default function EmergencyBooking() {
             </div>
 
             {error && <div className="eb-error">⚠️ {error}</div>}
+
+            <div className="eb-triage-summary">
+              <div className="eb-summary-title">Triage Summary</div>
+              <div className="eb-summary-text">
+                {triageRequest?.symptoms || "Loading triage symptoms..."}
+              </div>
+              {triageRequest?.symptom_duration && (
+                <div className="eb-summary-meta">Duration: {triageRequest.symptom_duration}</div>
+              )}
+            </div>
+
+            <div className="eb-safety-warning">
+              If this is life-threatening, call emergency services immediately or go to the nearest emergency department.
+            </div>
 
             <form onSubmit={handleSubmit} className="eb-form">
               

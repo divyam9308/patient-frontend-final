@@ -189,7 +189,7 @@ export default function PrioritySystem() {
       const { severity_result, triage_id, recommended_department_id } = triageResult;
 
       if (severity_result === 'emergency') {
-        navigate('/emergency-booking', {
+        navigate(`/emergency-booking?triage_id=${triage_id}${recommended_department_id ? `&dept=${recommended_department_id}` : ''}`, {
           state: { triage_id, recommended_department_id }
         });
       } else if (severity_result === 'priority') {

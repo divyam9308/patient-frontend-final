@@ -35,11 +35,12 @@ function todayStr() {
 export default function Appointment() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const routeState = location.state || {};
 
   // ── Booking Mode from URL ───────────────────────────────
-  const urlMode = searchParams.get('mode'); // 'regular', 'priority', or null (follow_up)
-  const urlTriageId = searchParams.get('triage_id');
-  const urlDeptId = searchParams.get('dept');
+  const urlMode = searchParams.get('mode') || routeState.mode; // 'regular', 'priority', or null (follow_up)
+  const urlTriageId = searchParams.get('triage_id') || routeState.triage_id;
+  const urlDeptId = searchParams.get('dept') || routeState.recommended_department_id || "";
   const bookingMode = urlMode || 'follow_up'; // Default to follow_up
 
   // ── List state ──────────────────────────────────────────
@@ -113,6 +114,19 @@ export default function Appointment() {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }, [urlMode]);
+
+  useEffect(() => {
+    if ((urlMode === 'regular' || urlMode === 'priority') && !selectedCity && cities.length === 1) {
+      setSelectedCity(cities[0].id);
+    }
+  }, [cities, selectedCity, urlMode]);
+
+  useEffect(() => {
+    if (!urlDeptId || selectedDept || departments.length === 0) return;
+    if (departments.some(department => department.id === urlDeptId)) {
+      setSelectedDept(urlDeptId);
+    }
+  }, [departments, selectedDept, urlDeptId]);
 
   // ── Cascading Fetch Logic ────────────────────────────────
   useEffect(() => {

@@ -478,14 +478,12 @@ function RecordsTab() {
 }
 
 /* ─── DOCTOR ALERTS TAB ─── */
+// eslint-disable-next-line no-unused-vars
 function AlertsTab() {
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // For demo: Assume the doctor_hospital_id is either in the user object or we fetch all
-  const user = (() => { try { return JSON.parse(localStorage.getItem('user')) || {}; } catch { return {}; } })();
-  
   const fetchAlerts = () => {
     setLoading(true);
     api.get(`/doctor/emergency-alerts`) // Add ?doctorHospitalId=... if you have it in user profile
@@ -505,11 +503,8 @@ function AlertsTab() {
 
   const handleAccept = async (requestId, doctorHospitalId) => {
     try {
-      // In a real app, doctor_id and doctor_hospital_id come from the logged-in doctor's session
-      // For demo, we'll just send the doctorHospitalId from the alert itself and a dummy doctor_id
       await api.post(`/doctor/emergency-alerts/${requestId}/accept`, {
-        doctor_hospital_id: doctorHospitalId,
-        doctor_id: user.id || '00000000-0000-0000-0000-000000000000'
+        doctor_hospital_id: doctorHospitalId
       });
       fetchAlerts();
     } catch (err) {
@@ -626,10 +621,8 @@ function EmergencyAlertsTab() {
   const handleAccept = async (alert) => {
     if (!window.confirm("Accept this emergency request?")) return;
     try {
-      // In a real app we'd pass the actual doctor's id. For demo, we fake it using the alert's assigned hospital.
       await api.post(`/doctor/emergency-alerts/${alert.emergency_request_id}/accept`, {
-        doctor_hospital_id: alert.doctor_hospital_id,
-        doctor_id: '00000000-0000-0000-0000-000000000000' // dummy or we'd fetch doctor_id
+        doctor_hospital_id: alert.doctor_hospital_id
       });
       fetchAlerts();
       alert("Emergency request accepted successfully.");
@@ -720,6 +713,10 @@ export default function Dashboard() {
     }
     if (newTab === "records") {
       navigate("/records");
+      return;
+    }
+    if (newTab === "alerts") {
+      setTab("emergency-alerts");
       return;
     }
     setTab(newTab);

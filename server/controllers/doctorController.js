@@ -35,47 +35,46 @@ export const getDoctorEmergencyAlerts = async (req, res) => {
 export const acceptEmergencyAlert = async (req, res) => {
   try {
     const { requestId } = req.params;
-    const { doctor_hospital_id, doctor_id } = req.body;
+    const { doctor_hospital_id } = req.body;
 
-    if (!doctor_hospital_id || !doctor_id) {
-      return res.status(400).json({ error: 'doctor_hospital_id and doctor_id required' });
+    if (!doctor_hospital_id) {
+      return res.status(400).json({ error: 'doctor_hospital_id required' });
     }
 
-    // 1. Check if emergency request is still open
-    const { data: request, error: reqErr } = await supabase
-      .from('emergency_requests')
-      .select('status')
-      .eq('id', requestId)
+    const { data: doctorHospital, error: doctorErr } = await supabase
+      .from('doctor_hospitals')
+      .select('doctor_id')
+      .eq('id', doctor_hospital_id)
       .single();
 
-    if (reqErr) throw reqErr;
-    if (request.status !== 'open') {
-      return res.status(400).json({ error: 'Request is no longer open (already accepted or closed)' });
+    if (doctorErr || !doctorHospital) {
+      return res.status(400).json({ error: 'Invalid doctor_hospital_id' });
     }
 
-    // 2. Update emergency request
     const { data: updatedReq, error: updateErr } = await supabase
       .from('emergency_requests')
       .update({
         status: 'accepted',
         assigned_doctor_hospital_id: doctor_hospital_id,
-        accepted_by_doctor_id: doctor_id,
+        accepted_by_doctor_id: doctorHospital.doctor_id,
         accepted_at: new Date().toISOString()
       })
       .eq('id', requestId)
+      .eq('status', 'open')
       .select()
-      .single();
+      .maybeSingle();
 
     if (updateErr) throw updateErr;
+    if (!updatedReq) {
+      return res.status(409).json({ error: 'Request is no longer open (already accepted or closed)' });
+    }
 
-    // 3. Update the specific alert to accepted
     await supabase
       .from('emergency_alerts')
       .update({ status: 'accepted', responded_at: new Date().toISOString() })
       .eq('emergency_request_id', requestId)
       .eq('doctor_hospital_id', doctor_hospital_id);
 
-    // 4. Mark other alerts for this request as expired
     await supabase
       .from('emergency_alerts')
       .update({ status: 'expired', responded_at: new Date().toISOString() })

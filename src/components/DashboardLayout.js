@@ -117,7 +117,7 @@ export default function DashboardLayout({ children, activeTab, onTabChange }) {
           {navItems.map(item => (
             <button
               key={item.id}
-              className={`db-nav-item ${activeTab === item.id ? "active" : ""}`}
+              className={`db-nav-item ${activeTab === item.id || (activeTab === "emergency-alerts" && item.id === "alerts") ? "active" : ""}`}
               onClick={() => handleNavClick(item)}
             >
               <span className="db-nav-icon">{item.icon}</span>
