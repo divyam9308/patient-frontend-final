@@ -1,7 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import DashboardLayout from "../components/DashboardLayout";
-import { api } from "../utils/api.js";
+import {
+  api,
+  getDoctorEmergencyAlerts,
+  acceptEmergencyAlert,
+  declineEmergencyAlert,
+} from "../utils/api.js";
 import "./Dashboard.css";
 
 /* ─── Stat Card ─── */
@@ -477,6 +482,130 @@ function RecordsTab() {
   return null;
 }
 
+function EmergencyAlertsTab() {
+  const [alerts, setAlerts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [workingId, setWorkingId] = useState("");
+
+  const loadAlerts = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const doctorHospitalId = localStorage.getItem("doctor_hospital_id") || "";
+      const data = await getDoctorEmergencyAlerts(doctorHospitalId);
+      setAlerts(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err.message || "Unable to load emergency alerts");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAlerts();
+    const timer = setInterval(loadAlerts, 15000);
+    return () => clearInterval(timer);
+  }, [loadAlerts]);
+
+  const handleAccept = async (alert) => {
+    const requestId = alert.emergency_request_id || alert.emergency_requests?.id;
+    if (!requestId || !alert.doctor_hospital_id) return;
+
+    setWorkingId(alert.id);
+    try {
+      await acceptEmergencyAlert(requestId, { doctor_hospital_id: alert.doctor_hospital_id });
+      await loadAlerts();
+    } catch (err) {
+      setError(err.message || "Unable to accept emergency alert");
+    } finally {
+      setWorkingId("");
+    }
+  };
+
+  const handleDecline = async (alert) => {
+    const requestId = alert.emergency_request_id || alert.emergency_requests?.id;
+    if (!requestId || !alert.doctor_hospital_id) return;
+
+    setWorkingId(alert.id);
+    try {
+      await declineEmergencyAlert(requestId, { doctor_hospital_id: alert.doctor_hospital_id });
+      setAlerts(prev => prev.filter(item => item.id !== alert.id));
+    } catch (err) {
+      setError(err.message || "Unable to decline emergency alert");
+    } finally {
+      setWorkingId("");
+    }
+  };
+
+  return (
+    <div className="db-emergency-alerts">
+      {error && <div className="db-alert-error">{error}</div>}
+
+      <div className="db-card">
+        <div className="db-card-header">
+          <div className="db-card-title">Emergency Alerts</div>
+          <button className="db-card-action" onClick={loadAlerts}>Refresh</button>
+        </div>
+
+        {loading ? (
+          <div className="db-empty-state">Loading emergency alerts...</div>
+        ) : alerts.length === 0 ? (
+          <div className="db-empty-state">No open emergency alerts right now.</div>
+        ) : (
+          <div className="db-alert-list">
+            {alerts.map(alert => {
+              const request = alert.emergency_requests || {};
+              const hospital = request.hospitals?.name || "Selected hospital";
+              const department = request.departments?.name || "Department";
+              const requestedAt = request.created_at
+                ? new Date(request.created_at).toLocaleString()
+                : "Just now";
+
+              return (
+                <div className="db-alert-item" key={alert.id}>
+                  <div className="db-alert-main">
+                    <div className="db-alert-topline">
+                      <span className="db-alert-pill">Open</span>
+                      <span className="db-alert-time">{requestedAt}</span>
+                    </div>
+                    <div className="db-alert-symptoms">{request.symptoms || "Emergency symptoms not listed"}</div>
+                    <div className="db-alert-meta">{hospital} - {department}</div>
+                    <div className="db-alert-meta">
+                      Location: {request.patient_location || "Not provided"}
+                      {request.patient_phone && <> - Phone: {request.patient_phone}</>}
+                    </div>
+                    <div className="db-alert-meta">
+                      Ambulance requested: {request.ambulance_requested ? "Yes" : "No"}
+                      {request.ambulance_status && <> - Status: {request.ambulance_status}</>}
+                    </div>
+                  </div>
+                  <div className="db-alert-actions">
+                    <button
+                      className="db-alert-accept"
+                      disabled={workingId === alert.id}
+                      onClick={() => handleAccept(alert)}
+                    >
+                      {workingId === alert.id ? "Working..." : "Accept"}
+                    </button>
+                    <button
+                      className="db-alert-decline"
+                      disabled={workingId === alert.id}
+                      onClick={() => handleDecline(alert)}
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── MAIN DASHBOARD ─── */
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -507,6 +636,7 @@ export default function Dashboard() {
     overview: { title: "Dashboard", sub: "Welcome back, " + (user?.name ? user.name.split(' ')[0] : 'there') },
     profile: { title: "My Profile", sub: "Manage your personal information and Aadhar details" },
     records: { title: "Medical Records", sub: "Access and download your health documents" },
+    "emergency-alerts": { title: "Emergency Alerts", sub: "Open emergency requests waiting for doctor response" },
   };
 
   return (
@@ -517,6 +647,7 @@ export default function Dashboard() {
       {tab === "overview" && <OverviewTab navigate={navigate} />}
       {tab === "profile" && <ProfileTab />}
       {tab === "records" && <RecordsTab />}
+      {tab === "emergency-alerts" && <EmergencyAlertsTab />}
     </DashboardLayout>
   );
 }

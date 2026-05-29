@@ -182,24 +182,75 @@ CREATE TABLE IF NOT EXISTS doctor_schedules (
   max_slots       INTEGER DEFAULT 20
 );
 
--- DROP existing appointments table to rebuild with relational schema
-DROP TABLE IF EXISTS appointments CASCADE;
+CREATE TABLE IF NOT EXISTS triage_requests (
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  patient_id      UUID REFERENCES patients(id) ON DELETE SET NULL,
+  symptoms        TEXT NOT NULL,
+  symptom_duration TEXT,
+  severity_result TEXT CHECK (severity_result IN ('regular','priority','emergency')),
+  recommended_department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
+  recommended_city_id UUID REFERENCES cities(id) ON DELETE SET NULL,
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
 
-CREATE TABLE appointments (
+CREATE TABLE IF NOT EXISTS appointments (
   id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   patient_id      UUID REFERENCES patients(id) ON DELETE CASCADE,
+  appointment_type TEXT CHECK (appointment_type IN ('follow_up','regular','priority','emergency')) DEFAULT 'follow_up',
   doctor_hospital_id UUID REFERENCES doctor_hospitals(id) ON DELETE CASCADE,
   appointment_date DATE NOT NULL,
   appointment_time TIME NOT NULL,
   status          TEXT DEFAULT 'pending',
   reason          TEXT,
-  is_emergency    BOOLEAN DEFAULT false,
+  triage_id       UUID REFERENCES triage_requests(id) ON DELETE SET NULL,
   created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Unique index to prevent double booking the exact same doctor at the same time
-CREATE UNIQUE INDEX IF NOT EXISTS unique_appt_slot 
+ALTER TABLE appointments
+  ADD COLUMN IF NOT EXISTS appointment_type TEXT CHECK (appointment_type IN ('follow_up','regular','priority','emergency')) DEFAULT 'follow_up',
+  ADD COLUMN IF NOT EXISTS triage_id UUID REFERENCES triage_requests(id) ON DELETE SET NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS unique_appt_slot
 ON appointments(doctor_hospital_id, appointment_date, appointment_time);
+
+CREATE TABLE IF NOT EXISTS emergency_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  patient_id UUID REFERENCES patients(id) ON DELETE SET NULL,
+  triage_id UUID REFERENCES triage_requests(id) ON DELETE SET NULL,
+  city_id UUID REFERENCES cities(id) ON DELETE SET NULL,
+  department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
+  hospital_id UUID REFERENCES hospitals(id) ON DELETE SET NULL,
+  symptoms TEXT NOT NULL,
+  patient_location TEXT,
+  patient_phone TEXT,
+  ambulance_requested BOOLEAN DEFAULT false,
+  ambulance_status TEXT DEFAULT 'not_requested',
+  status TEXT DEFAULT 'open',
+  assigned_doctor_hospital_id UUID REFERENCES doctor_hospitals(id) ON DELETE SET NULL,
+  accepted_by_doctor_id UUID REFERENCES doctors(id) ON DELETE SET NULL,
+  accepted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS emergency_alerts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  emergency_request_id UUID REFERENCES emergency_requests(id) ON DELETE CASCADE,
+  doctor_hospital_id UUID REFERENCES doctor_hospitals(id) ON DELETE CASCADE,
+  status TEXT DEFAULT 'sent',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  responded_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS ambulance_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  emergency_request_id UUID REFERENCES emergency_requests(id) ON DELETE CASCADE,
+  patient_id UUID REFERENCES patients(id) ON DELETE SET NULL,
+  pickup_location TEXT NOT NULL,
+  destination_hospital_id UUID REFERENCES hospitals(id) ON DELETE SET NULL,
+  patient_phone TEXT,
+  status TEXT DEFAULT 'requested',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
 -- ─────────────────────────────────────────────────
 -- HOW TO RUN: Supabase Dashboard → SQL Editor → New Query → paste → Run

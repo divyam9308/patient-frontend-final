@@ -39,6 +39,13 @@ export default function DashboardLayout({ children, activeTab, onTabChange }) {
     { id: "medicines",     icon: "💊", label: "Medicine Verification" },
     { id: "records",       icon: "📁", label: "Medical Records" },
     { id: "symptom",       icon: "🩺", label: "Symptom Analyser" },
+    ...(
+      user.role === "Doctor" ||
+      user.role === "Admin" ||
+      localStorage.getItem("doctorMode") === "true"
+        ? [{ id: "emergency-alerts", icon: "!", label: "Emergency Alerts", badge: "Live" }]
+        : []
+    ),
   ];
 
   const handleNavClick = (item) => {

@@ -14,6 +14,18 @@ import medicalRecordsRoutes from './routes/medicalRecordsRoutes.js';
 import medicineRoutes from './routes/medicineRoutes.js';
 import treatmentRoutes from './routes/treatmentRoutes.js';
 import priorityRoutes from './routes/priorityRoutes.js';
+import triageRoutes from './routes/triageRoutes.js';
+import emergencyRoutes from './routes/emergencyRoutes.js';
+import ambulanceRoutes from './routes/ambulanceRoutes.js';
+import doctorRoutes from './routes/doctorRoutes.js';
+import authenticateToken from './middleware/authMiddleware.js';
+import {
+  getCities,
+  getDepartments,
+  getHospitals,
+  getDoctors,
+  getDoctorSchedules,
+} from './controllers/appointmentController.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -37,6 +49,17 @@ app.use('/api/medical-records', medicalRecordsRoutes); // MedicalRecords.js
 app.use('/api/medicines', medicineRoutes);    // MedicineVerification.js
 app.use('/api/treatments', treatmentRoutes);  // Treatments.js
 app.use('/api/priority', priorityRoutes);     // PrioritySystem.js
+app.use('/api/triage', triageRoutes);         // Symptom triage
+app.use('/api/emergency-requests', emergencyRoutes);
+app.use('/api/ambulance-requests', ambulanceRoutes);
+app.use('/api/doctor', doctorRoutes);
+
+// Top-level directory aliases used by the appointment flow.
+app.get('/api/cities', authenticateToken, getCities);
+app.get('/api/departments', authenticateToken, getDepartments);
+app.get('/api/hospitals', authenticateToken, getHospitals);
+app.get('/api/doctors', authenticateToken, getDoctors);
+app.get('/api/doctors/:doctorHospitalId/schedules', authenticateToken, getDoctorSchedules);
 
 // ── Health Check ────────────────────────────────────────
 app.get('/health', (req, res) => {

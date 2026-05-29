@@ -69,6 +69,15 @@ export const api = {
     });
     return handleResponse(response);
   },
+
+  patch: async (endpoint, body) => {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: 'PATCH',
+      headers: getHeaders(),
+      body: JSON.stringify(body),
+    });
+    return handleResponse(response);
+  },
 };
 
 // ── Appointment Helper Functions ─────────────────────────
@@ -89,3 +98,38 @@ export const getDoctorSchedules = (doctorHospitalId) =>
 
 export const createAppointment = (payload) => 
   api.post('/appointments', payload);
+
+// Triage helper functions
+
+export const submitTriage = (payload) =>
+  api.post('/triage', payload);
+
+export const getTriageRequest = (triageId) =>
+  api.get(`/triage/${triageId}`);
+
+// Emergency helper functions
+
+export const createEmergencyRequest = (payload) =>
+  api.post('/emergency-requests', payload);
+
+// Doctor alert helper functions
+
+export const getDoctorEmergencyAlerts = (doctorHospitalId) =>
+  api.get(`/doctor/emergency-alerts${doctorHospitalId ? `?doctorHospitalId=${doctorHospitalId}` : ''}`);
+
+export const acceptEmergencyAlert = (requestId, payload) =>
+  api.post(`/doctor/emergency-alerts/${requestId}/accept`, payload);
+
+export const declineEmergencyAlert = (requestId, payload) =>
+  api.post(`/doctor/emergency-alerts/${requestId}/decline`, payload);
+
+// Ambulance helper functions
+
+export const createAmbulanceRequest = (payload) =>
+  api.post('/ambulance-requests', payload);
+
+export const getAmbulanceRequest = (id) =>
+  api.get(`/ambulance-requests/${id}`);
+
+export const updateAmbulanceRequestStatus = (id, status) =>
+  api.patch(`/ambulance-requests/${id}/status`, { status });
