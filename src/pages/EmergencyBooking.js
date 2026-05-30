@@ -133,8 +133,13 @@ export default function EmergencyBooking() {
     e.preventDefault();
     setError("");
 
-    if (!selectedCity || !selectedDept || !selectedLocality || !selectedArrivalTime || !selectedHospital || !patientPhone) {
+    if (!selectedCity || !selectedDept || !selectedLocality || !selectedArrivalTime || !patientPhone) {
       setError("Please fill all required emergency details.");
+      return;
+    }
+
+    if (!selectedHospital) {
+      setError("Please select a hospital from the availability table.");
       return;
     }
 
@@ -283,23 +288,104 @@ export default function EmergencyBooking() {
                 </div>
               </div>
 
-              <div className="eb-row">
-                <div className="eb-group">
-                  <label>Nearest / Preferred Hospital *</label>
-                  <select
-                    value={selectedHospital}
-                    onChange={e => setSelectedHospital(e.target.value)}
-                    required
-                    disabled={!selectedLocality || availabilityLoading}
-                  >
-                    <option value="">{availabilityLoading ? "Checking emergency spaces..." : "Choose hospital"}</option>
-                    {hospitalAvailability.map(hospital => (
-                      <option key={hospital.id} value={hospital.id} disabled={hospital.available_emergency_spaces <= 0}>
-                        {hospital.name} - {hospital.available_emergency_spaces}/{hospital.app_reserved_beds} app beds, {hospital.available_ambulances ?? "call for"} ambulances
-                      </option>
-                    ))}
-                  </select>
+              {(selectedLocality || selectedArrivalTime) && (
+                <div className="eb-selection-summary">
+                  <div>
+                    <span>Selected location</span>
+                    <strong>{selectedLocationLabel || "Choose location"}</strong>
+                  </div>
+                  <div>
+                    <span>Emergency appointment time</span>
+                    <strong>{selectedArrivalLabel || "Choose time"}</strong>
+                  </div>
                 </div>
+              )}
+
+              <div className="eb-hospital-panel">
+                <div className="eb-panel-header">
+                  <div>
+                    <h3>Nearby Emergency Spaces</h3>
+                    <p>App-reserved beds and ambulances reduce only when patients book through this app.</p>
+                  </div>
+                  {availabilityLoading && <span className="eb-loading-pill">Checking...</span>}
+                </div>
+
+                {!selectedLocality ? (
+                  <div className="eb-table-empty">Choose your Delhi area above to see nearby hospitals.</div>
+                ) : hospitalAvailability.length === 0 && !availabilityLoading ? (
+                  <div className="eb-table-empty">No hospitals found for this department and area.</div>
+                ) : (
+                  <div className="eb-table-wrap">
+                    <table className="eb-hospital-table">
+                      <thead>
+                        <tr>
+                          <th>Hospital</th>
+                          <th>Proximity</th>
+                          <th>App Beds</th>
+                          <th>Total Beds</th>
+                          <th>Other Bookings</th>
+                          <th>Ambulances</th>
+                          <th>Contact</th>
+                          <th>Response</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {hospitalAvailability.map(hospital => (
+                          <tr key={hospital.id} className={selectedHospital === hospital.id ? "eb-row-selected" : ""}>
+                            <td>
+                              <strong>{hospital.name}</strong>
+                              <span>{hospital.address || "Delhi"}</span>
+                              {hospital.data_source_url && (
+                                <a href={hospital.data_source_url} target="_blank" rel="noreferrer">Source</a>
+                              )}
+                            </td>
+                            <td>{hospital.proximity_label}</td>
+                            <td>
+                              <span className={hospital.available_emergency_spaces > 0 ? "eb-bed-count" : "eb-bed-count eb-bed-zero"}>
+                                {hospital.available_emergency_spaces}
+                              </span>
+                              <small>{hospital.occupied_emergency_spaces} used of {hospital.app_reserved_beds} reserved</small>
+                            </td>
+                            <td>
+                              <strong>{hospital.total_bed_capacity || "NA"}</strong>
+                              <small>published total</small>
+                            </td>
+                            <td>
+                              <strong>{hospital.occupied_emergency_spaces}</strong>
+                              <small>{hospital.other_booked_appointments} other appointments</small>
+                            </td>
+                            <td>
+                              <strong>{hospital.available_ambulances ?? "Call"}</strong>
+                              <small>
+                                {hospital.app_reserved_ambulances === null
+                                  ? "fleet count not public"
+                                  : `${hospital.active_ambulance_requests} used of ${hospital.app_reserved_ambulances} app reserved`}
+                              </small>
+                              <small>
+                                {hospital.total_ambulance_fleet === null
+                                  ? "total not public"
+                                  : `${hospital.total_ambulance_fleet} total listed`}
+                              </small>
+                            </td>
+                            <td>{hospital.emergency_contact || hospital.phone || "Hospital desk"}</td>
+                            <td>{hospital.estimated_response_time}</td>
+                            <td>
+                              <button
+                                type="button"
+                                className="eb-table-select"
+                                disabled={hospital.available_emergency_spaces <= 0}
+                                onClick={() => setSelectedHospital(hospital.id)}
+                              >
+                                {selectedHospital === hospital.id ? "Selected" : hospital.available_emergency_spaces > 0 ? "Select" : "Full"}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
               {selectedHospitalDetails && (
@@ -310,19 +396,6 @@ export default function EmergencyBooking() {
                   </div>
                   <div className={selectedHospitalDetails.available_emergency_spaces > 0 ? "eb-space-pill" : "eb-space-pill eb-space-full"}>
                     {selectedHospitalDetails.available_emergency_spaces} of {selectedHospitalDetails.app_reserved_beds} app beds available
-                  </div>
-                </div>
-              )}
-
-              {(selectedLocality || selectedArrivalTime) && (
-                <div className="eb-selection-summary">
-                  <div>
-                    <span>Selected location</span>
-                    <strong>{selectedLocationLabel || "Choose location"}</strong>
-                  </div>
-                  <div>
-                    <span>Emergency appointment time</span>
-                    <strong>{selectedArrivalLabel || "Choose time"}</strong>
                   </div>
                 </div>
               )}
@@ -359,93 +432,6 @@ export default function EmergencyBooking() {
                 </button>
               </div>
             </form>
-
-            <div className="eb-hospital-panel">
-              <div className="eb-panel-header">
-                <div>
-                  <h3>Nearby Emergency Spaces</h3>
-                  <p>App-reserved beds and ambulances reduce only when patients book through this app.</p>
-                </div>
-                {availabilityLoading && <span className="eb-loading-pill">Checking...</span>}
-              </div>
-
-              {!selectedLocality ? (
-                <div className="eb-table-empty">Choose your Delhi area above to see nearby hospitals.</div>
-              ) : hospitalAvailability.length === 0 && !availabilityLoading ? (
-                <div className="eb-table-empty">No hospitals found for this department and area.</div>
-              ) : (
-                <div className="eb-table-wrap">
-                  <table className="eb-hospital-table">
-                    <thead>
-                      <tr>
-                        <th>Hospital</th>
-                        <th>Proximity</th>
-                        <th>App Beds</th>
-                        <th>Total Beds</th>
-                        <th>Other Bookings</th>
-                        <th>Ambulances</th>
-                        <th>Contact</th>
-                        <th>Response</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {hospitalAvailability.map(hospital => (
-                        <tr key={hospital.id} className={selectedHospital === hospital.id ? "eb-row-selected" : ""}>
-                          <td>
-                            <strong>{hospital.name}</strong>
-                            <span>{hospital.address || "Delhi"}</span>
-                            {hospital.data_source_url && (
-                              <a href={hospital.data_source_url} target="_blank" rel="noreferrer">Source</a>
-                            )}
-                          </td>
-                          <td>{hospital.proximity_label}</td>
-                          <td>
-                            <span className={hospital.available_emergency_spaces > 0 ? "eb-bed-count" : "eb-bed-count eb-bed-zero"}>
-                              {hospital.available_emergency_spaces}
-                            </span>
-                            <small>{hospital.occupied_emergency_spaces} used of {hospital.app_reserved_beds} reserved</small>
-                          </td>
-                          <td>
-                            <strong>{hospital.total_bed_capacity || "NA"}</strong>
-                            <small>published total</small>
-                          </td>
-                          <td>
-                            <strong>{hospital.occupied_emergency_spaces}</strong>
-                            <small>{hospital.other_booked_appointments} other appointments</small>
-                          </td>
-                          <td>
-                            <strong>{hospital.available_ambulances ?? "Call"}</strong>
-                            <small>
-                              {hospital.app_reserved_ambulances === null
-                                ? "fleet count not public"
-                                : `${hospital.active_ambulance_requests} used of ${hospital.app_reserved_ambulances} app reserved`}
-                            </small>
-                            <small>
-                              {hospital.total_ambulance_fleet === null
-                                ? "total not public"
-                                : `${hospital.total_ambulance_fleet} total listed`}
-                            </small>
-                          </td>
-                          <td>{hospital.emergency_contact || hospital.phone || "Hospital desk"}</td>
-                          <td>{hospital.estimated_response_time}</td>
-                          <td>
-                            <button
-                              type="button"
-                              className="eb-table-select"
-                              disabled={hospital.available_emergency_spaces <= 0}
-                              onClick={() => setSelectedHospital(hospital.id)}
-                            >
-                              {selectedHospital === hospital.id ? "Selected" : hospital.available_emergency_spaces > 0 ? "Select" : "Full"}
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
           </div>
         )}
       </div>
