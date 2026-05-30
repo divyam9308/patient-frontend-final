@@ -117,6 +117,18 @@
   outline: none;
 }
 
+.eb-readonly-field {
+  width: 100%;
+  min-height: 44px;
+  border: 1.5px solid #d4e8da;
+  border-radius: 10px;
+  background: #f0f8f2;
+  color: #1b3d2a;
+  font-size: 14px;
+  font-weight: 800;
+  padding: 11px 13px;
+}
+
 .eb-group input:focus,
 .eb-group select:focus {
   border-color: #3d8b56;

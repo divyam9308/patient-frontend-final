@@ -72,6 +72,10 @@ export default function EmergencyBooking() {
   const selectedHospitalDetails = hospitalAvailability.find(h => h.id === selectedHospital);
   const selectedArrivalLabel = timeOptions.find(option => option.value === selectedArrivalTime)?.label || "";
   const selectedLocationLabel = selectedLocality ? formatLocality(selectedLocality) : "";
+  const estimatedDepartmentName =
+    departments.find(dept => dept.id === selectedDept)?.name
+    || triage?.recommended_department?.name
+    || "Estimating from symptoms";
 
   useEffect(() => {
     if (!triageId) {
@@ -95,9 +99,7 @@ export default function EmergencyBooking() {
         if (cityData.length === 1) {
           setSelectedCity(cityData[0].id);
         }
-        if (!routeDepartmentId && triageData.recommended_department_id) {
-          setSelectedDept(triageData.recommended_department_id);
-        }
+        setSelectedDept(routeDepartmentId || triageData.recommended_department_id || "");
       })
       .catch(err => setError(err.message || "Unable to load emergency booking details"))
       .finally(() => setPageLoading(false));
@@ -109,9 +111,24 @@ export default function EmergencyBooking() {
     if (!selectedCity) return;
 
     getDepartmentsByCity(selectedCity)
-      .then(setDepartments)
+      .then(deptData => {
+        setDepartments(deptData);
+        setSelectedDept(current => {
+          if (current) return current;
+
+          const recommended = triage?.recommended_department_id;
+          if (recommended && deptData.some(dept => dept.id === recommended)) {
+            return recommended;
+          }
+
+          const fallback = deptData.find(dept => dept.name === "Emergency Medicine")
+            || deptData.find(dept => dept.name === "General Medicine")
+            || deptData[0];
+          return fallback?.id || "";
+        });
+      })
       .catch(err => setError(err.message || "Unable to load departments"));
-  }, [selectedCity]);
+  }, [selectedCity, triage?.recommended_department_id]);
 
   useEffect(() => {
     setSelectedHospital("");
@@ -219,18 +236,10 @@ export default function EmergencyBooking() {
                 </div>
 
                 <div className="eb-group">
-                  <label>Department *</label>
-                  <select
-                    value={selectedDept}
-                    onChange={e => setSelectedDept(e.target.value)}
-                    required
-                    disabled={!selectedCity}
-                  >
-                    <option value="">Choose department</option>
-                    {departments.map(dept => (
-                      <option key={dept.id} value={dept.id}>{dept.name}</option>
-                    ))}
-                  </select>
+                  <label>Estimated Department</label>
+                  <div className="eb-readonly-field">
+                    {estimatedDepartmentName}
+                  </div>
                 </div>
               </div>
 
@@ -241,7 +250,7 @@ export default function EmergencyBooking() {
                     value={selectedLocality}
                     onChange={e => setSelectedLocality(e.target.value)}
                     required
-                    disabled={!selectedDept}
+                    disabled={!selectedCity || !selectedDept}
                   >
                     <option value="">Choose area</option>
                     {localities.map(locality => (
