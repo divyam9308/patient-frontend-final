@@ -339,7 +339,7 @@
 .eb-hospital-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 1080px;
+  min-width: 1180px;
   background: #fff;
 }
 
@@ -373,7 +373,8 @@
 
 .eb-hospital-table td strong,
 .eb-hospital-table td span,
-.eb-hospital-table td small {
+.eb-hospital-table td small,
+.eb-hospital-table td a {
   display: block;
 }
 
@@ -387,6 +388,14 @@
 .eb-hospital-table td small {
   color: #7a9485;
   font-size: 12px;
+}
+
+.eb-hospital-table td a {
+  color: #2d6a3f;
+  font-size: 12px;
+  font-weight: 800;
+  margin-top: 4px;
+  text-decoration: none;
 }
 
 .eb-bed-count {

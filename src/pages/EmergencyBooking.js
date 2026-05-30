@@ -295,7 +295,7 @@ export default function EmergencyBooking() {
                     <option value="">{availabilityLoading ? "Checking emergency spaces..." : "Choose hospital"}</option>
                     {hospitalAvailability.map(hospital => (
                       <option key={hospital.id} value={hospital.id} disabled={hospital.available_emergency_spaces <= 0}>
-                        {hospital.name} - {hospital.available_emergency_spaces} beds, {hospital.available_ambulances} ambulances
+                        {hospital.name} - {hospital.available_emergency_spaces}/{hospital.app_reserved_beds} app beds, {hospital.available_ambulances ?? "call for"} ambulances
                       </option>
                     ))}
                   </select>
@@ -309,7 +309,7 @@ export default function EmergencyBooking() {
                     <span>{selectedHospitalDetails.address}</span>
                   </div>
                   <div className={selectedHospitalDetails.available_emergency_spaces > 0 ? "eb-space-pill" : "eb-space-pill eb-space-full"}>
-                    {selectedHospitalDetails.available_emergency_spaces} emergency spaces available
+                    {selectedHospitalDetails.available_emergency_spaces} of {selectedHospitalDetails.app_reserved_beds} app beds available
                   </div>
                 </div>
               )}
@@ -364,7 +364,7 @@ export default function EmergencyBooking() {
               <div className="eb-panel-header">
                 <div>
                   <h3>Nearby Emergency Spaces</h3>
-                  <p>Availability is calculated from hospital capacity minus open/accepted emergency requests.</p>
+                  <p>App-reserved beds and ambulances reduce only when patients book through this app.</p>
                 </div>
                 {availabilityLoading && <span className="eb-loading-pill">Checking...</span>}
               </div>
@@ -380,7 +380,8 @@ export default function EmergencyBooking() {
                       <tr>
                         <th>Hospital</th>
                         <th>Proximity</th>
-                        <th>Emergency Beds</th>
+                        <th>App Beds</th>
+                        <th>Total Beds</th>
                         <th>Other Bookings</th>
                         <th>Ambulances</th>
                         <th>Contact</th>
@@ -394,21 +395,37 @@ export default function EmergencyBooking() {
                           <td>
                             <strong>{hospital.name}</strong>
                             <span>{hospital.address || "Delhi"}</span>
+                            {hospital.data_source_url && (
+                              <a href={hospital.data_source_url} target="_blank" rel="noreferrer">Source</a>
+                            )}
                           </td>
                           <td>{hospital.proximity_label}</td>
                           <td>
                             <span className={hospital.available_emergency_spaces > 0 ? "eb-bed-count" : "eb-bed-count eb-bed-zero"}>
                               {hospital.available_emergency_spaces}
                             </span>
-                            <small>of {hospital.emergency_capacity}</small>
+                            <small>{hospital.occupied_emergency_spaces} used of {hospital.app_reserved_beds} reserved</small>
+                          </td>
+                          <td>
+                            <strong>{hospital.total_bed_capacity || "NA"}</strong>
+                            <small>published total</small>
                           </td>
                           <td>
                             <strong>{hospital.occupied_emergency_spaces}</strong>
                             <small>{hospital.other_booked_appointments} other appointments</small>
                           </td>
                           <td>
-                            <strong>{hospital.available_ambulances}</strong>
-                            <small>of {hospital.ambulance_fleet} ready</small>
+                            <strong>{hospital.available_ambulances ?? "Call"}</strong>
+                            <small>
+                              {hospital.app_reserved_ambulances === null
+                                ? "fleet count not public"
+                                : `${hospital.active_ambulance_requests} used of ${hospital.app_reserved_ambulances} app reserved`}
+                            </small>
+                            <small>
+                              {hospital.total_ambulance_fleet === null
+                                ? "total not public"
+                                : `${hospital.total_ambulance_fleet} total listed`}
+                            </small>
                           </td>
                           <td>{hospital.emergency_contact || hospital.phone || "Hospital desk"}</td>
                           <td>{hospital.estimated_response_time}</td>
