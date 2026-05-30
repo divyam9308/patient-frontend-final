@@ -112,6 +112,12 @@ export const getTriageRequest = (triageId) =>
 export const createEmergencyRequest = (payload) =>
   api.post('/emergency-requests', payload);
 
+export const getDelhiEmergencyLocalities = () =>
+  api.get('/emergency-requests/localities');
+
+export const getEmergencyHospitalAvailability = ({ cityId, departmentId, locality }) =>
+  api.get(`/emergency-requests/hospital-availability?cityId=${cityId}&departmentId=${departmentId}&locality=${encodeURIComponent(locality || '')}`);
+
 // Doctor alert helper functions
 
 export const getDoctorEmergencyAlerts = (doctorHospitalId) =>

@@ -223,6 +223,7 @@ CREATE TABLE IF NOT EXISTS emergency_requests (
   symptoms TEXT NOT NULL,
   patient_location TEXT,
   patient_phone TEXT,
+  requested_arrival_time TIMESTAMPTZ,
   ambulance_requested BOOLEAN DEFAULT false,
   ambulance_status TEXT DEFAULT 'not_requested',
   status TEXT DEFAULT 'open',
