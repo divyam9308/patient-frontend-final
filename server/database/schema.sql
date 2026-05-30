@@ -149,8 +149,24 @@ CREATE TABLE IF NOT EXISTS hospitals (
   address         TEXT,
   phone           TEXT,
   website         TEXT,
+  emergency_phone TEXT,
+  emergency_bed_capacity INTEGER,
+  ambulance_fleet INTEGER,
+  app_reserved_beds INTEGER,
+  app_reserved_ambulances INTEGER,
+  data_source_url TEXT,
+  data_verified_at TIMESTAMPTZ,
   created_at      TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE hospitals
+  ADD COLUMN IF NOT EXISTS emergency_phone TEXT,
+  ADD COLUMN IF NOT EXISTS emergency_bed_capacity INTEGER,
+  ADD COLUMN IF NOT EXISTS ambulance_fleet INTEGER,
+  ADD COLUMN IF NOT EXISTS app_reserved_beds INTEGER,
+  ADD COLUMN IF NOT EXISTS app_reserved_ambulances INTEGER,
+  ADD COLUMN IF NOT EXISTS data_source_url TEXT,
+  ADD COLUMN IF NOT EXISTS data_verified_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS doctors (
   id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -230,8 +246,13 @@ CREATE TABLE IF NOT EXISTS emergency_requests (
   assigned_doctor_hospital_id UUID REFERENCES doctor_hospitals(id) ON DELETE SET NULL,
   accepted_by_doctor_id UUID REFERENCES doctors(id) ON DELETE SET NULL,
   accepted_at TIMESTAMPTZ,
+  cleared_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE emergency_requests
+  ADD COLUMN IF NOT EXISTS requested_arrival_time TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS cleared_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS emergency_alerts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

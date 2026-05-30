@@ -18,6 +18,7 @@ import triageRoutes from './routes/triageRoutes.js';
 import emergencyRoutes from './routes/emergencyRoutes.js';
 import ambulanceRoutes from './routes/ambulanceRoutes.js';
 import doctorRoutes from './routes/doctorRoutes.js';
+import { expireOldEmergencyRequests } from './controllers/emergencyController.js';
 import authenticateToken from './middleware/authMiddleware.js';
 import {
   getCities,
@@ -36,6 +37,7 @@ dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const EMERGENCY_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 
 // ── Middleware ──────────────────────────────────────────
 app.use(cors({ origin: '*' })); // Allow all origins for local network testing
@@ -72,6 +74,11 @@ if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+}
+
+if (process.env.NODE_ENV !== 'test') {
+  expireOldEmergencyRequests();
+  setInterval(expireOldEmergencyRequests, EMERGENCY_CLEANUP_INTERVAL_MS);
 }
 
 // Export the Express API for Vercel's serverless function

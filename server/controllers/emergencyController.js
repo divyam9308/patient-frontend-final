@@ -1,39 +1,16 @@
 import supabase from '../config/supabaseClient.js';
+import {
+  DELHI_EMERGENCY_HOSPITALS,
+  LOCALITY_HOSPITAL_PRIORITY,
+} from '../data/delhiEmergencyDirectory.js';
 
-const DEFAULT_EMERGENCY_CAPACITY = 8;
-const DEFAULT_AMBULANCE_FLEET = 3;
+const DEFAULT_EMERGENCY_CAPACITY = 0;
+const EMERGENCY_CLEAR_AFTER_MS = 60 * 60 * 1000;
 
-const HOSPITAL_EMERGENCY_CAPACITY = {
-  'AIIMS New Delhi': 18,
-  'Safdarjung Hospital': 20,
-  'Max Super Speciality Hospital': 10,
-  'Apollo Hospitals': 12,
-  'Fortis Escorts Heart Institute': 8,
-};
-
-const HOSPITAL_AMBULANCE_FLEET = {
-  'AIIMS New Delhi': 7,
-  'Safdarjung Hospital': 8,
-  'Max Super Speciality Hospital': 4,
-  'Apollo Hospitals': 5,
-  'Fortis Escorts Heart Institute': 4,
-};
-
-const LOCALITY_HOSPITAL_PRIORITY = {
-  kalkaji: ['Fortis Escorts Heart Institute', 'Apollo Hospitals', 'Max Super Speciality Hospital', 'Safdarjung Hospital', 'AIIMS New Delhi'],
-  govindpuri: ['Fortis Escorts Heart Institute', 'Apollo Hospitals', 'Max Super Speciality Hospital', 'Safdarjung Hospital', 'AIIMS New Delhi'],
-  'greater kailash': ['Fortis Escorts Heart Institute', 'Max Super Speciality Hospital', 'Apollo Hospitals', 'Safdarjung Hospital', 'AIIMS New Delhi'],
-  saket: ['Max Super Speciality Hospital', 'AIIMS New Delhi', 'Safdarjung Hospital', 'Apollo Hospitals', 'Fortis Escorts Heart Institute'],
-  'malviya nagar': ['Max Super Speciality Hospital', 'AIIMS New Delhi', 'Safdarjung Hospital', 'Fortis Escorts Heart Institute', 'Apollo Hospitals'],
-  'sarita vihar': ['Apollo Hospitals', 'Fortis Escorts Heart Institute', 'Max Super Speciality Hospital', 'Safdarjung Hospital', 'AIIMS New Delhi'],
-  okhla: ['Fortis Escorts Heart Institute', 'Apollo Hospitals', 'Max Super Speciality Hospital', 'Safdarjung Hospital', 'AIIMS New Delhi'],
-  'lajpat nagar': ['Safdarjung Hospital', 'AIIMS New Delhi', 'Fortis Escorts Heart Institute', 'Max Super Speciality Hospital', 'Apollo Hospitals'],
-  'south extension': ['AIIMS New Delhi', 'Safdarjung Hospital', 'Max Super Speciality Hospital', 'Fortis Escorts Heart Institute', 'Apollo Hospitals'],
-  'hauz khas': ['AIIMS New Delhi', 'Safdarjung Hospital', 'Max Super Speciality Hospital', 'Fortis Escorts Heart Institute', 'Apollo Hospitals'],
-  'green park': ['AIIMS New Delhi', 'Safdarjung Hospital', 'Max Super Speciality Hospital', 'Fortis Escorts Heart Institute', 'Apollo Hospitals'],
-  'vasant kunj': ['Max Super Speciality Hospital', 'AIIMS New Delhi', 'Safdarjung Hospital', 'Fortis Escorts Heart Institute', 'Apollo Hospitals'],
-  default: ['AIIMS New Delhi', 'Safdarjung Hospital', 'Max Super Speciality Hospital', 'Apollo Hospitals', 'Fortis Escorts Heart Institute'],
-};
+const DIRECTORY_BY_NAME = DELHI_EMERGENCY_HOSPITALS.flatMap(hospital => [
+  hospital.name,
+  ...(hospital.aliases || []),
+].map(name => [name.toLowerCase(), hospital]));
 
 function validateEmergencyArrivalTime(value) {
   if (!value) return null;
@@ -56,19 +33,73 @@ function isMissingRequestedTimeColumn(error) {
   return String(error?.message || '').toLowerCase().includes('requested_arrival_time');
 }
 
-export const getDelhiLocalities = (req, res) => {
-  res.json(Object.keys(LOCALITY_HOSPITAL_PRIORITY).filter(locality => locality !== 'default'));
-};
+function isMissingClearedAtColumn(error) {
+  return String(error?.message || '').toLowerCase().includes('cleared_at');
+}
 
-export const getEmergencyHospitalAvailability = async (req, res) => {
-  try {
-    const { cityId, departmentId, locality = 'default' } = req.query;
+function isMissingHospitalResourceColumn(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return [
+    'emergency_phone',
+    'emergency_bed_capacity',
+    'ambulance_fleet',
+    'app_reserved_beds',
+    'app_reserved_ambulances',
+    'data_source_url',
+    'data_verified_at',
+  ].some(column => message.includes(column));
+}
 
-    if (!cityId || !departmentId) {
-      return res.status(400).json({ error: 'cityId and departmentId are required' });
-    }
+function getDirectoryRecord(hospitalName) {
+  const normalized = String(hospitalName || '').toLowerCase();
+  const exact = DIRECTORY_BY_NAME.find(([name]) => name === normalized);
+  if (exact) return exact[1];
 
-    const { data: hospitals, error: hospitalError } = await supabase
+  const partial = DIRECTORY_BY_NAME.find(([name]) => normalized.includes(name) || name.includes(normalized));
+  return partial?.[1] || null;
+}
+
+function toNumberOrNull(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getDefaultAppReserve(total) {
+  const numericTotal = toNumberOrNull(total);
+  if (!numericTotal || numericTotal <= 0) return 0;
+  return Math.max(1, Math.round(numericTotal * 0.4));
+}
+
+async function getHospitalsForAvailability(cityId, departmentId) {
+  const resourceSelect = `
+    id,
+    name,
+    address,
+    phone,
+    website,
+    emergency_phone,
+    emergency_bed_capacity,
+    ambulance_fleet,
+    app_reserved_beds,
+    app_reserved_ambulances,
+    data_source_url,
+    data_verified_at,
+    doctor_hospitals!inner (
+      id,
+      doctors!inner (
+        department_id
+      )
+    )
+  `;
+
+  let { data, error } = await supabase
+    .from('hospitals')
+    .select(resourceSelect)
+    .eq('city_id', cityId)
+    .eq('doctor_hospitals.doctors.department_id', departmentId);
+
+  if (error && isMissingHospitalResourceColumn(error)) {
+    const fallback = await supabase
       .from('hospitals')
       .select(`
         id,
@@ -86,7 +117,87 @@ export const getEmergencyHospitalAvailability = async (req, res) => {
       .eq('city_id', cityId)
       .eq('doctor_hospitals.doctors.department_id', departmentId);
 
-    if (hospitalError) throw hospitalError;
+    data = fallback.data;
+    error = fallback.error;
+  }
+
+  if (error) throw error;
+  return data || [];
+}
+
+export const expireOldEmergencyRequests = async () => {
+  try {
+    const cutoff = new Date(Date.now() - EMERGENCY_CLEAR_AFTER_MS).toISOString();
+    const { data: staleRequests, error: staleError } = await supabase
+      .from('emergency_requests')
+      .select('id')
+      .in('status', ['open', 'accepted'])
+      .lte('requested_arrival_time', cutoff);
+
+    if (staleError) {
+      if (isMissingRequestedTimeColumn(staleError)) return { expired: 0, skipped: true };
+      throw staleError;
+    }
+
+    const staleIds = (staleRequests || []).map(request => request.id);
+    if (!staleIds.length) return { expired: 0 };
+
+    let { error: requestUpdateError } = await supabase
+      .from('emergency_requests')
+      .update({
+        status: 'expired',
+        ambulance_status: 'expired',
+        cleared_at: new Date().toISOString(),
+      })
+      .in('id', staleIds);
+
+    if (requestUpdateError && isMissingClearedAtColumn(requestUpdateError)) {
+      const fallback = await supabase
+        .from('emergency_requests')
+        .update({
+          status: 'expired',
+          ambulance_status: 'expired',
+        })
+        .in('id', staleIds);
+      requestUpdateError = fallback.error;
+    }
+
+    if (requestUpdateError) throw requestUpdateError;
+
+    await supabase
+      .from('emergency_alerts')
+      .update({ status: 'expired', responded_at: new Date().toISOString() })
+      .in('emergency_request_id', staleIds)
+      .in('status', ['sent', 'accepted']);
+
+    await supabase
+      .from('ambulance_requests')
+      .update({ status: 'expired' })
+      .in('emergency_request_id', staleIds)
+      .in('status', ['requested', 'dispatched', 'on_route']);
+
+    return { expired: staleIds.length };
+  } catch (error) {
+    console.error('Expire old emergency requests error:', error);
+    return { expired: 0, error: error.message };
+  }
+};
+
+export const getDelhiLocalities = (req, res) => {
+  res.json(Object.keys(LOCALITY_HOSPITAL_PRIORITY).filter(locality => locality !== 'default'));
+};
+
+export const getEmergencyHospitalAvailability = async (req, res) => {
+  try {
+    await expireOldEmergencyRequests();
+
+    const { cityId, departmentId, locality = 'default' } = req.query;
+
+    if (!cityId || !departmentId) {
+      return res.status(400).json({ error: 'cityId and departmentId are required' });
+    }
+
+    const hospitals = await getHospitalsForAvailability(cityId, departmentId);
 
     const hospitalIds = [...new Set((hospitals || []).map(h => h.id))];
     const { data: activeRequests, error: requestError } = hospitalIds.length
@@ -163,8 +274,18 @@ export const getEmergencyHospitalAvailability = async (req, res) => {
       if (seen.has(hospital.id)) continue;
       seen.add(hospital.id);
 
-      const capacity = HOSPITAL_EMERGENCY_CAPACITY[hospital.name] || DEFAULT_EMERGENCY_CAPACITY;
-      const ambulanceFleet = HOSPITAL_AMBULANCE_FLEET[hospital.name] || DEFAULT_AMBULANCE_FLEET;
+      const directoryRecord = getDirectoryRecord(hospital.name);
+      const totalBeds = toNumberOrNull(hospital.emergency_bed_capacity)
+        || directoryRecord?.publishedBedCapacity
+        || DEFAULT_EMERGENCY_CAPACITY;
+      const totalAmbulances = toNumberOrNull(hospital.ambulance_fleet)
+        || toNumberOrNull(directoryRecord?.ambulanceFleet);
+      const appReservedBeds = toNumberOrNull(hospital.app_reserved_beds)
+        || directoryRecord?.appReservedBeds
+        || getDefaultAppReserve(totalBeds);
+      const appReservedAmbulances = toNumberOrNull(hospital.app_reserved_ambulances)
+        || directoryRecord?.appReservedAmbulances
+        || (totalAmbulances === null ? null : getDefaultAppReserve(totalAmbulances));
       const occupied = activeByHospital[hospital.id] || 0;
       const otherBookedAppointments = appointmentsByHospital[hospital.id] || 0;
       const busyAmbulances = ambulancesBusyByHospital[hospital.id] || 0;
@@ -173,18 +294,25 @@ export const getEmergencyHospitalAvailability = async (req, res) => {
       uniqueHospitals.push({
         id: hospital.id,
         name: hospital.name,
-        address: hospital.address,
-        phone: hospital.phone,
-        website: hospital.website,
-        emergency_capacity: capacity,
+        address: hospital.address || directoryRecord?.address,
+        phone: hospital.phone || directoryRecord?.phone,
+        website: hospital.website || directoryRecord?.website,
+        emergency_capacity: appReservedBeds,
+        total_bed_capacity: totalBeds,
+        app_reserved_beds: appReservedBeds,
         occupied_emergency_spaces: occupied,
-        available_emergency_spaces: Math.max(capacity - occupied, 0),
+        available_emergency_spaces: Math.max(appReservedBeds - occupied, 0),
         other_booked_appointments: otherBookedAppointments,
         total_emergency_load: occupied + otherBookedAppointments,
-        ambulance_fleet: ambulanceFleet,
+        ambulance_fleet: appReservedAmbulances,
+        total_ambulance_fleet: totalAmbulances,
+        app_reserved_ambulances: appReservedAmbulances,
         active_ambulance_requests: busyAmbulances,
-        available_ambulances: Math.max(ambulanceFleet - busyAmbulances, 0),
-        emergency_contact: hospital.phone || 'Hospital emergency desk',
+        available_ambulances: appReservedAmbulances === null ? null : Math.max(appReservedAmbulances - busyAmbulances, 0),
+        emergency_contact: hospital.emergency_phone || directoryRecord?.emergencyPhone || hospital.phone || 'Hospital emergency desk',
+        data_source_url: hospital.data_source_url || directoryRecord?.sourceUrl || hospital.website,
+        data_source_note: directoryRecord?.sourceNote || 'Hospital details are from the configured hospital directory.',
+        data_verified_at: hospital.data_verified_at || null,
         estimated_response_time: priorityIndex === -1
           ? '45-60 min'
           : priorityIndex < 2
@@ -220,6 +348,8 @@ export const getEmergencyHospitalAvailability = async (req, res) => {
 
 export const createEmergencyRequest = async (req, res) => {
   try {
+    await expireOldEmergencyRequests();
+
     const {
       triage_id,
       city_id,
