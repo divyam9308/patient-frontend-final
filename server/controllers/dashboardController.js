@@ -100,13 +100,28 @@ export const getDashboardSummary = async (req, res) => {
 
     const formattedEmergencies = (emergencyData || []).map(e => {
       const dateObj = new Date(e.requested_arrival_time || e.created_at);
+      
+      const tz = 'Asia/Kolkata';
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit',
+        hourCycle: 'h23'
+      }).formatToParts(dateObj);
+
+      const p = {};
+      parts.forEach(part => p[part.type] = part.value);
+
+      const mon = new Intl.DateTimeFormat('en-US', { timeZone: tz, month: 'short' }).format(dateObj).toUpperCase();
+      const time = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: true }).format(dateObj);
+
       return {
         id: e.id,
         doc: 'Emergency / Ambulance',
         dept: e.departments?.name || 'Emergency',
-        day: dateObj.getDate().toString().padStart(2, '0'),
-        mon: dateObj.toLocaleString('en-US', { month: 'short' }).toUpperCase(),
-        time: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        day: p.day,
+        mon: mon,
+        time: time,
         status: 'upcoming',
         timestamp: dateObj.getTime()
       };

@@ -281,11 +281,23 @@ export const getAppointments = async (req, res) => {
 
     const formattedEmergencies = (emergencyData || []).map(e => {
       const dateObj = new Date(e.requested_arrival_time || e.created_at);
-      const year = dateObj.getFullYear();
-      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-      const date = String(dateObj.getDate()).padStart(2, '0');
-      const hours = String(dateObj.getHours()).padStart(2, '0');
-      const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+      
+      const tz = 'Asia/Kolkata';
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit',
+        hourCycle: 'h23' // ensures 00-23 format
+      }).formatToParts(dateObj);
+
+      const p = {};
+      parts.forEach(part => p[part.type] = part.value);
+
+      const apptDate = `${p.year}-${p.month}-${p.day}`;
+      const apptTime = `${p.hour}:${p.minute}`;
+
+      const mon = new Intl.DateTimeFormat('en-US', { timeZone: tz, month: 'short' }).format(dateObj).toUpperCase();
+      const time = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: true }).format(dateObj);
 
       return {
         id: e.id,
@@ -294,12 +306,12 @@ export const getAppointments = async (req, res) => {
         city: e.hospitals?.cities?.name,
         hospital: e.hospitals?.name,
         appointment_type: 'emergency',
-        day: date,
-        mon: dateObj.toLocaleString('en-US', { month: 'short' }).toUpperCase(),
-        time: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        day: p.day,
+        mon: mon,
+        time: time,
         status: ['open', 'accepted'].includes(e.status) ? 'upcoming' : (e.status === 'expired' ? 'cancelled' : e.status),
-        appointment_date: `${year}-${month}-${date}`,
-        appointment_time: `${hours}:${minutes}`,
+        appointment_date: apptDate,
+        appointment_time: apptTime,
         reason: 'Emergency request (booked via triage)',
       };
     });
