@@ -267,7 +267,44 @@ export const getAppointments = async (req, res) => {
       };
     });
 
-    res.json(formatted);
+    const { data: emergencyData } = await supabase
+      .from('emergency_requests')
+      .select(`
+        id,
+        status,
+        created_at,
+        requested_arrival_time,
+        hospitals (name, cities(name)),
+        departments (name)
+      `)
+      .eq('patient_id', patientId);
+
+    const formattedEmergencies = (emergencyData || []).map(e => {
+      const dateObj = new Date(e.requested_arrival_time || e.created_at);
+      return {
+        id: e.id,
+        doc: 'Emergency / Ambulance',
+        dept: e.departments?.name || 'Emergency',
+        city: e.hospitals?.cities?.name,
+        hospital: e.hospitals?.name,
+        appointment_type: 'emergency',
+        day: dateObj.getDate().toString().padStart(2, '0'),
+        mon: dateObj.toLocaleString('en-US', { month: 'short' }).toUpperCase(),
+        time: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        status: ['open', 'accepted'].includes(e.status) ? 'upcoming' : e.status,
+        appointment_date: dateObj.toISOString().split('T')[0],
+        appointment_time: dateObj.toISOString().split('T')[1].substring(0, 5),
+        reason: 'Emergency request (booked via triage)',
+      };
+    });
+
+    const allAppointments = [...formatted, ...formattedEmergencies].sort((a, b) => {
+      const dateA = new Date(`${a.appointment_date}T${a.appointment_time}`);
+      const dateB = new Date(`${b.appointment_date}T${b.appointment_time}`);
+      return dateA - dateB;
+    });
+
+    res.json(allAppointments);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

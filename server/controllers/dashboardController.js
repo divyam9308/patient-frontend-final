@@ -9,15 +9,26 @@ export const getDashboardSummary = async (req, res) => {
   try {
     const patientId = req.user.id;
 
-    // 1. Count upcoming appointments (only future ones)
     const { count: upcomingApptsCount, error: apptError } = await supabase
       .from('appointments')
       .select('*', { count: 'exact', head: true })
       .eq('patient_id', patientId)
-      .eq('status', 'upcoming')
-      .gt('appointment_time', new Date().toISOString());
+      .in('status', ['upcoming', 'pending'])
+      .gt('appointment_date', new Date().toISOString().split('T')[0]);
 
-    if (apptError) throw apptError;
+    if (apptError && String(apptError.message).includes('appointment_date')) {
+       // fallback for old schema
+       const old = await supabase.from('appointments').select('*', { count: 'exact', head: true }).eq('patient_id', patientId).eq('status', 'upcoming').gt('appointment_time', new Date().toISOString());
+       upcomingApptsCount = old.count;
+    }
+
+    const { count: activeEmergenciesCount } = await supabase
+      .from('emergency_requests')
+      .select('*', { count: 'exact', head: true })
+      .eq('patient_id', patientId)
+      .in('status', ['open', 'accepted']);
+
+    const totalUpcoming = (upcomingApptsCount || 0) + (activeEmergenciesCount || 0);
 
     // 2. Count medications
     const { count: activeMedicationsCount, error: medError } = await supabase
@@ -45,44 +56,76 @@ export const getDashboardSummary = async (req, res) => {
     if (treatmentError) throw treatmentError;
 
     // 5. Fetch top 3 upcoming appointments (only future ones) for the snapshot
-    const { data: upcomingAppointments, error: apptListError } = await supabase
+    const { data: upcomingAppointments } = await supabase
       .from('appointments')
-      .select('*')
+      .select(`
+        id, appointment_date, appointment_time, status, appointment_type,
+        doctor_hospitals ( doctors(name, departments(name)) )
+      `)
       .eq('patient_id', patientId)
-      .eq('status', 'upcoming')
-      .gt('appointment_time', new Date().toISOString())
-      .order('appointment_time', { ascending: true })
-      .limit(3);
+      .in('status', ['upcoming', 'pending']);
+      
+    let apptList = upcomingAppointments || [];
+    if (!apptList.length) {
+      // fallback for old schema
+      const old = await supabase.from('appointments').select('*').eq('patient_id', patientId).in('status', ['upcoming', 'pending']).limit(3);
+      apptList = old.data || [];
+    }
 
-    if (apptListError) throw apptListError;
+    const { data: emergencyData } = await supabase
+      .from('emergency_requests')
+      .select(`id, created_at, requested_arrival_time, status, departments(name)`)
+      .eq('patient_id', patientId)
+      .in('status', ['open', 'accepted']);
 
     // Map database fields to frontend friendly camelCase formats
-    const formattedAppts = upcomingAppointments.map(a => {
-      const dateObj = new Date(a.appointment_time);
-      const day = dateObj.getDate().toString().padStart(2, '0');
-      const mon = dateObj.toLocaleString('en-US', { month: 'short' }).toUpperCase();
-      const time = dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-      
+    const formattedAppts = apptList.map(a => {
+      let dateObj;
+      if (a.appointment_date && a.appointment_time) {
+        dateObj = new Date(`${a.appointment_date}T${a.appointment_time}`);
+      } else {
+        dateObj = new Date(a.appointment_time);
+      }
       return {
         id: a.id,
-        doc: a.doctor_name,
-        dept: a.department,
-        day,
-        mon,
-        time,
-        status: a.status,
-        appointment_time: a.appointment_time
+        doc: a.doctor_hospitals?.doctors?.name || a.doctor_name,
+        dept: a.doctor_hospitals?.doctors?.departments?.name || a.department,
+        day: dateObj.getDate().toString().padStart(2, '0'),
+        mon: dateObj.toLocaleString('en-US', { month: 'short' }).toUpperCase(),
+        time: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        status: a.status === 'pending' ? 'upcoming' : a.status,
+        timestamp: dateObj.getTime()
       };
     });
 
+    const formattedEmergencies = (emergencyData || []).map(e => {
+      const dateObj = new Date(e.requested_arrival_time || e.created_at);
+      return {
+        id: e.id,
+        doc: 'Emergency / Ambulance',
+        dept: e.departments?.name || 'Emergency',
+        day: dateObj.getDate().toString().padStart(2, '0'),
+        mon: dateObj.toLocaleString('en-US', { month: 'short' }).toUpperCase(),
+        time: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        status: 'upcoming',
+        timestamp: dateObj.getTime()
+      };
+    });
+
+    const combinedAndSorted = [...formattedAppts, ...formattedEmergencies]
+      .filter(a => a.timestamp > Date.now() || a.status === 'upcoming')
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .slice(0, 3)
+      .map(({ timestamp, ...rest }) => rest);
+
     res.json({
       stats: {
-        upcomingAppts: upcomingApptsCount || 0,
+        upcomingAppts: totalUpcoming,
         activeMedicines: activeMedicationsCount || 0,
         medicalRecords: medicalRecordsCount || 0,
         treatments: treatmentsCount || 0
       },
-      upcomingAppointments: formattedAppts
+      upcomingAppointments: combinedAndSorted
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
