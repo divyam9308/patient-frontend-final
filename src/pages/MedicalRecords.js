@@ -204,7 +204,10 @@ export default function MedicalRecords() {
   const trendItems = records
     .flatMap(record => (record.vitals || []).map(vital => ({ ...vital, recordName: record.name, recordDate: record.date })))
     .filter(vital => vital.name && vital.value && vital.status !== "Normal")
-    .sort((a, b) => (a.status === "Normal") - (b.status === "Normal"))
+    .sort((a, b) => {
+      const statusOrder = { "Alert": 0, "Warning": 1, "Normal": 2 };
+      return (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3);
+    })
     .slice(0, 6);
 
   const abnormalPreview = parsedVitalsPreview.filter(vital => vital.status !== "Normal");
@@ -406,7 +409,7 @@ export default function MedicalRecords() {
                             className="mr-spark-bar-fill"
                             style={{
                               width: vital.status === "Normal" ? "75%" : "100%",
-                              background: vital.status === "Normal" ? "var(--green-cta)" : "var(--red)",
+                              background: vital.status === "Normal" ? "var(--green-cta)" : (vital.status === "Warning" ? "var(--amber)" : "var(--red)"),
                             }}
                           />
                         </div>

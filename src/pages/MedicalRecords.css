@@ -1012,6 +1012,8 @@
 }
 
 .mr-vitals-status-pill.normal { background: #d1fae5; color: #065f46; }
+.mr-vitals-status-pill.warning { background: #fef3c7; color: #92400e; }
+.mr-vitals-status-pill.alert { background: #fee2e2; color: #991b1b; }
 .mr-vitals-status-pill.high { background: #fee2e2; color: #991b1b; }
 .mr-vitals-status-pill.low { background: #eff6ff; color: #1e40af; }
 
