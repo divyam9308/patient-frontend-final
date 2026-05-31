@@ -82,6 +82,7 @@ export default function MedicalRecords() {
       }
 
       try {
+        await new Promise(resolve => setTimeout(resolve, 20));
         const text = await extractTextFromFile(file);
         setReportText(text);
         const result = runAnalysisForText(text);

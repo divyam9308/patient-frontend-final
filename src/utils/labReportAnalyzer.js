@@ -233,6 +233,8 @@ const LAB_MARKERS = [
 ];
 
 const STOP_WORDS = new Set(["age", "date", "page", "id", "pin", "phone"]);
+const MAX_ANALYSIS_TEXT_LENGTH = 60000;
+const MAX_PDF_PARSE_BYTES = 1200000;
 
 function normalizeText(text) {
   return String(text || "")
@@ -275,7 +277,7 @@ function buildRange(marker) {
 }
 
 export function analyzeLabReport(rawText) {
-  const normalized = normalizeText(rawText);
+  const normalized = normalizeText(rawText).slice(0, MAX_ANALYSIS_TEXT_LENGTH);
   const vitals = [];
   const seen = new Set();
 
@@ -380,13 +382,14 @@ export async function extractTextFromFile(file) {
 
   if (isTextLike) return file.text();
 
+  if (["png", "jpg", "jpeg", "webp", "heic"].includes(extension) || file.type.startsWith("image/")) {
+    return "";
+  }
+
   if (file.type === "application/pdf" || extension === "pdf") {
-    const buffer = await file.arrayBuffer();
+    const buffer = await file.slice(0, MAX_PDF_PARSE_BYTES).arrayBuffer();
     const bytes = new Uint8Array(buffer);
-    let binary = "";
-    for (let i = 0; i < bytes.length; i += 1) {
-      binary += String.fromCharCode(bytes[i]);
-    }
+    const binary = new TextDecoder("latin1").decode(bytes);
 
     const candidates = [];
     const textMatches = binary.match(/\(([^()]{2,})\)\s*Tj/g) || [];
@@ -400,8 +403,7 @@ export async function extractTextFromFile(file) {
       if (pieces.length) candidates.push(pieces.join(""));
     });
 
-    const fallback = new TextDecoder("latin1")
-      .decode(bytes)
+    const fallback = binary
       .split("")
       .map((character) => {
         const code = character.charCodeAt(0);
