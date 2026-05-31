@@ -19,7 +19,7 @@ const getResend = () => {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
     dotenv.config({ path: path.resolve(__dirname, '..', '.env'), override: true });
-    console.log('Loaded RESEND_API_KEY in authController:', process.env.RESEND_API_KEY);
+    console.log('RESEND_API_KEY configured:', Boolean(process.env.RESEND_API_KEY));
     resend = new Resend(process.env.RESEND_API_KEY);
   }
   return resend;
