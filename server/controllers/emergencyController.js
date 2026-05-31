@@ -132,7 +132,7 @@ export const expireOldEmergencyRequests = async () => {
       .from('emergency_requests')
       .select('id')
       .in('status', ['open', 'accepted'])
-      .lte('requested_arrival_time', cutoff);
+      .or(`requested_arrival_time.lte.${cutoff},and(requested_arrival_time.is.null,created_at.lte.${cutoff})`);
 
     if (staleError) {
       if (isMissingRequestedTimeColumn(staleError)) return { expired: 0, skipped: true };
