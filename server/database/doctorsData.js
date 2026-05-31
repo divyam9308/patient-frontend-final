@@ -97,7 +97,7 @@ export const CITIES_DATA = {
       "Narayana Health (NH)": {
         departments: {
           Cardiology: ["Dr. Devi Prasad Shetty", "Dr. Anita Joshi"],
-          Cardiac Surgery: ["Dr. Vijay Kumar S."],
+          "Cardiac Surgery": ["Dr. Vijay Kumar S."],
           Pediatrics: ["Dr. Rohan Shenoy"],
           General: ["Dr. Priya Suresh"],
           Nephrology: ["Dr. Ashwin Rao"],
