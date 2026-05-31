@@ -628,92 +628,103 @@ export default function Appointment() {
             const displayStatus = (a.status === "upcoming" && isPast) ? "completed" : a.status;
             const statusStyle = STATUS_STYLES[displayStatus] || STATUS_STYLES.upcoming;
             const type = TYPE_BADGES[a.appointment_type] || TYPE_BADGES.follow_up;
+            const isActionable = a.status === "upcoming" || a.status === "pending";
 
             return (
               <div
                 key={a.id}
-                className="appt-row"
-                style={{ borderBottom: i < filtered.length - 1 ? "1px solid #eaf4ec" : "none" }}
+                style={{
+                  padding: "18px 28px",
+                  borderBottom: i < filtered.length - 1 ? "1px solid #eaf4ec" : "none",
+                }}
               >
-                <div className="appt-date-badge">
-                  <span style={{ fontSize: 18, fontWeight: 800, lineHeight: 1 }}>{a.day}</span>
-                  <span style={{ fontSize: 10, fontWeight: 600, opacity: 0.85 }}>{a.mon}</span>
-                </div>
+                {/* Top row: date badge + info + status pill */}
+                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                  <div className="appt-date-badge">
+                    <span style={{ fontSize: 18, fontWeight: 800, lineHeight: 1 }}>{a.day}</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, opacity: 0.85 }}>{a.mon}</span>
+                  </div>
 
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 15, fontWeight: 700, color: "#1b3d2a" }}>{a.doc || "Unknown Doctor"}</span>
-                    <span
-                      className="appt-type-badge"
-                      style={{ background: type.bg, color: type.color, borderColor: type.border }}
-                    >
-                      {type.label}
-                    </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: "#1b3d2a" }}>{a.doc || "Unknown Doctor"}</span>
+                      <span
+                        className="appt-type-badge"
+                        style={{ background: type.bg, color: type.color, borderColor: type.border }}
+                      >
+                        {type.label}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 13, color: "#7a9485", marginTop: 2 }}>
+                      {a.dept || "Department"}
+                      {a.hospital && <> - {a.hospital}</>}
+                      {a.city && <> - {a.city}</>}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#aab8b0", marginTop: 1 }}>
+                      {a.time}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 13, color: "#7a9485", marginTop: 2 }}>
-                    {a.dept || "Department"}
-                    {a.hospital && <> - {a.hospital}</>}
-                    {a.city && <> - {a.city}</>}
-                  </div>
-                  <div style={{ fontSize: 12, color: "#aab8b0", marginTop: 1 }}>
-                    {a.time}
-                  </div>
-                </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
                   <span style={{
                     padding: "4px 12px", borderRadius: 50,
                     background: (a.status === "upcoming" && isPast) ? "#f3f4f6" : statusStyle.bg,
                     color: (a.status === "upcoming" && isPast) ? "#4b5563" : statusStyle.color,
                     border: `1px solid ${(a.status === "upcoming" && isPast) ? "#e5e7eb" : statusStyle.border}`,
-                    fontSize: 12, fontWeight: 700
+                    fontSize: 12, fontWeight: 700, flexShrink: 0
                   }}>
                     {a.status === "upcoming" && isPast ? "Past Appointment" : statusStyle.label}
                   </span>
+                </div>
 
-                  {a.status === "upcoming" && (
-                    <div style={{ display: "flex", gap: 6 }}>
+                {/* Action buttons row — always visible for upcoming appointments */}
+                {isActionable && (
+                  <div style={{
+                    display: "flex", gap: 8, marginTop: 12, paddingLeft: 58,
+                    flexWrap: "wrap"
+                  }}>
+                    <button
+                      onClick={() => handleUpdateStatus(a.id, "completed")}
+                      style={{
+                        padding: "7px 18px", borderRadius: 50,
+                        border: "1.5px solid #bfdbfe", background: "#eff6ff",
+                        color: "#1d4ed8", fontSize: 12, fontWeight: 700,
+                        cursor: "pointer", transition: "all 0.2s"
+                      }}
+                    >
+                      ✓ Mark Completed
+                    </button>
+
+                    {!isPast && (
                       <button
-                        onClick={() => handleUpdateStatus(a.id, "completed")}
+                        onClick={() => handleCancel(a.id)}
+                        disabled={cancellingId === a.id}
                         style={{
-                          padding: "6px 12px", borderRadius: 50,
-                          border: "1.5px solid #bfdbfe", background: "#eff6ff",
-                          color: "#1d4ed8", fontSize: 12, fontWeight: 600, cursor: "pointer"
+                          padding: "7px 18px", borderRadius: 50,
+                          border: "1.5px solid #fecaca", background: "#fff",
+                          color: "#dc2626", fontSize: 12, fontWeight: 700,
+                          cursor: "pointer", opacity: cancellingId === a.id ? 0.6 : 1,
+                          transition: "all 0.2s"
                         }}
                       >
-                        Completed
+                        {cancellingId === a.id ? "Cancelling..." : "✕ Cancel"}
                       </button>
+                    )}
 
-                      {!isPast && (
-                        <button
-                          onClick={() => handleCancel(a.id)}
-                          disabled={cancellingId === a.id}
-                          style={{
-                            padding: "6px 16px", borderRadius: 50,
-                            border: "1.5px solid #fecaca", background: "#fff",
-                            color: "#dc2626", fontSize: 12, fontWeight: 600,
-                            cursor: "pointer", opacity: cancellingId === a.id ? 0.6 : 1
-                          }}
-                        >
-                          {cancellingId === a.id ? "Cancelling..." : "Cancel"}
-                        </button>
-                      )}
-
-                      {isPast && (
-                        <button
-                          onClick={() => handleUpdateStatus(a.id, "missed")}
-                          style={{
-                            padding: "6px 12px", borderRadius: 50,
-                            border: "1.5px solid #fde68a", background: "#fffbeb",
-                            color: "#b45309", fontSize: 12, fontWeight: 600, cursor: "pointer"
-                          }}
-                        >
-                          Missed
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
+                    {isPast && (
+                      <button
+                        onClick={() => handleUpdateStatus(a.id, "missed")}
+                        style={{
+                          padding: "7px 18px", borderRadius: 50,
+                          border: "1.5px solid #fde68a", background: "#fffbeb",
+                          color: "#b45309", fontSize: 12, fontWeight: 700,
+                          cursor: "pointer", transition: "all 0.2s"
+                        }}
+                      >
+                        ⚠ Mark Missed
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
