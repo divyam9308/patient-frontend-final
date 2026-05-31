@@ -1,9 +1,8 @@
 // src/utils/api.js
 // API helper utility to perform fetch requests to the Express backend
 
-const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? '/api' 
-  : (process.env.REACT_APP_API_URL || `http://${window.location.hostname}:5000/api`);
+const API_BASE_URL = process.env.REACT_APP_API_URL ||
+  (process.env.NODE_ENV === 'production' ? '/api' : `http://${window.location.hostname}:5000/api`);
 
 const getHeaders = () => {
   const token = localStorage.getItem('token') || sessionStorage.getItem('token');
