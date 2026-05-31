@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import { api } from "../utils/api.js";
-import { analyzeLabReport, extractTextFromFile } from "../utils/labReportAnalyzer.js";
+import { analyzeLabReport, extractTextFromFile, generateFindingsGroups } from "../utils/labReportAnalyzer.js";
 import "./Dashboard.css";
 import "./MedicalRecords.css";
 
@@ -185,8 +185,25 @@ export default function MedicalRecords() {
 
   // Simulate file download
   const handleDownload = (e, name) => {
-    e.stopPropagation(); // prevent modal opening
+    if (e) e.stopPropagation(); // prevent modal opening
     alert(`Starting download for: ${name}\nFile size: Mock PDF file compiled successfully.`);
+  };
+
+  // Delete medical record from backend and local state
+  const handleDeleteRecord = async (e, recordId) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm("Are you sure you want to delete this medical record? This will also remove any vitals associated with it.")) {
+      return;
+    }
+    try {
+      await api.delete(`/medical-records/${recordId}`);
+      setRecords(records.filter(r => r.id !== recordId));
+      if (selectedRecord && selectedRecord.id === recordId) {
+        setSelectedRecord(null);
+      }
+    } catch (err) {
+      alert("Failed to delete medical record: " + err.message);
+    }
   };
 
   // Generate Doctor Sharing link
@@ -203,13 +220,17 @@ export default function MedicalRecords() {
 
   const trendItems = records
     .flatMap(record => (record.vitals || []).map(vital => ({ ...vital, recordName: record.name, recordDate: record.date })))
-    .filter(vital => vital.name && vital.value && vital.status !== "Normal")
+    .filter(vital => vital.name && vital.value)
     .sort((a, b) => (a.status === "Normal") - (b.status === "Normal"))
-    .slice(0, 6);
+    .slice(0, 10);
 
   const abnormalPreview = parsedVitalsPreview.filter(vital => vital.status !== "Normal");
   const abnormalRecordVitals = selectedRecord
     ? (selectedRecord.vitals || []).filter(vital => vital.status !== "Normal")
+    : [];
+
+  const selectedRecordFindings = selectedRecord
+    ? (selectedRecord.analysis?.findingsGroups || generateFindingsGroups(selectedRecord.vitals || []))
     : [];
 
   return (
@@ -330,6 +351,17 @@ export default function MedicalRecords() {
                         </button>
                         <button className="mr-btn-action secondary">
                           👁 View
+                        </button>
+                        <button
+                          className="mr-btn-action danger"
+                          onClick={(e) => handleDeleteRecord(e, r.id)}
+                          style={{
+                            background: "#fee2e2",
+                            color: "#b91c1c",
+                            borderColor: "#fca5a5"
+                          }}
+                        >
+                          🗑️ Delete
                         </button>
                       </div>
                     </div>
@@ -695,68 +727,72 @@ export default function MedicalRecords() {
                     <span className="mr-viewer-facility">{selectedRecord.facility}</span>
                   </div>
 
-                  <div className="mr-viewer-section">
-                    <span className="mr-viewer-label">Abnormal Lab Levels</span>
-                    <table className="mr-vitals-table">
-                      <thead>
-                        <tr>
-                          <th>Parameter</th>
-                          <th>Observed Value</th>
-                          <th>Reference Range</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {abnormalRecordVitals.length === 0 ? (
-                          <tr>
-                            <td colSpan="3" style={{ color: "var(--text-muted)" }}>
-                              No abnormal supported lab levels were detected from this report.
-                            </td>
-                          </tr>
-                        ) : (
-                          abnormalRecordVitals.map((v, i) => (
-                            <tr key={i}>
-                              <td style={{ fontWeight: 600 }}>{v.name}</td>
-                              <td>{v.value}</td>
-                              <td>
-                                <span style={{ color: "var(--text-muted)" }}>{v.range} </span>
-                                <span className={`mr-vitals-status-pill ${(v.status || "Normal").toLowerCase()}`}>
-                                  {v.status || "Normal"}
-                                </span>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {abnormalRecordVitals.length > 0 && (
+                  {/* AI Interpretations of findings, showing big and individually */}
+                  {selectedRecord.type === "Lab Report" && selectedRecordFindings.length > 0 ? (
                     <div className="mr-viewer-section">
-                      <span className="mr-viewer-label">Abnormal Level Interpretation</span>
-                      <div className="mr-ai-result-card">
-                        <div className="mr-abnormal-list">
-                          {abnormalRecordVitals.map((vital, index) => (
-                            <div key={`${vital.name}-${index}`} className="mr-abnormal-item">
-                              <div>
-                                <strong>{vital.name}</strong>
-                                <span>{vital.value} | Ref: {vital.range}</span>
-                              </div>
-                              <span className={`mr-vitals-status-pill ${(vital.status || "Normal").toLowerCase()}`}>
-                                {vital.status || "Normal"}
+                      <span className="mr-viewer-label">🔬 Clinical Findings & Analysis</span>
+                      <div className="mr-findings-list">
+                        {selectedRecordFindings.map((group, index) => (
+                          <div key={index} className={`mr-finding-card ${group.severity}`}>
+                            <div className="mr-finding-card-header">
+                              <span className="mr-finding-badge">{group.badge}</span>
+                              <h4 className="mr-finding-title">{group.title}</h4>
+                              <span className={`mr-finding-severity-pill ${group.severity}`}>
+                                {group.severity === "high" ? "Action Required" : group.severity === "warning" ? "Borderline" : "Normal"}
                               </span>
-                              {vital.possibleConditions?.length > 0 && (
-                                <small>{vital.possibleConditions.join(", ")}</small>
-                              )}
                             </div>
-                          ))}
-                        </div>
-                        <small>{selectedRecord.analysis?.disclaimer || "This is not a diagnosis. Confirm abnormal results with a qualified clinician."}</small>
+                            <div className="mr-finding-vitals-summary">
+                              {group.vitals.map((vital, vitalIdx) => (
+                                <div key={vitalIdx} className="mr-finding-vital-row">
+                                  <span className="mr-finding-vital-name">{vital.name}</span>
+                                  <span className="mr-finding-vital-val">{vital.value}</span>
+                                  <span className="mr-finding-vital-range">Ref: {vital.range}</span>
+                                  <span className={`mr-vitals-status-pill ${vital.status.toLowerCase()}`}>
+                                    {vital.status}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                            <p className="mr-finding-interpretation">{group.interpretation}</p>
+                          </div>
+                        ))}
                       </div>
                     </div>
+                  ) : (
+                    <>
+                      {abnormalRecordVitals.length > 0 && (
+                        <div className="mr-viewer-section">
+                          <span className="mr-viewer-label">Abnormal Lab Levels</span>
+                          <table className="mr-vitals-table">
+                            <thead>
+                              <tr>
+                                <th>Parameter</th>
+                                <th>Observed Value</th>
+                                <th>Reference Range</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {abnormalRecordVitals.map((v, i) => (
+                                <tr key={i}>
+                                  <td style={{ fontWeight: 600 }}>{v.name}</td>
+                                  <td>{v.value}</td>
+                                  <td>
+                                    <span style={{ color: "var(--text-muted)" }}>{v.range} </span>
+                                    <span className={`mr-vitals-status-pill ${(v.status || "Normal").toLowerCase()}`}>
+                                      {v.status || "Normal"}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </>
                   )}
 
                   <div className="mr-viewer-section">
-                    <span className="mr-viewer-label">Clinical Comments</span>
+                    <span className="mr-viewer-label">Clinical Comments / Summary</span>
                     <p className="mr-viewer-notes">
                       {selectedRecord.notes}
                     </p>
@@ -801,8 +837,20 @@ export default function MedicalRecords() {
             </div>
             <div className="mr-modal-footer">
               <button
+                className="mr-btn-action danger"
+                onClick={(e) => handleDeleteRecord(e, selectedRecord.id)}
+                style={{
+                  background: "#fee2e2",
+                  color: "#b91c1c",
+                  borderColor: "#fca5a5",
+                  marginRight: "auto"
+                }}
+              >
+                🗑️ Delete Record
+              </button>
+              <button
                 className="mr-btn-action secondary"
-                onClick={() => handleDownload(null, selectedRecord.name)}
+                onClick={(e) => handleDownload(null, selectedRecord.name)}
               >
                 ⬇ Download PDF
               </button>

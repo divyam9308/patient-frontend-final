@@ -1097,3 +1097,125 @@
   align-items: center;
   gap: 4px;
 }
+
+/* =============================================
+   AI CLINICAL FINDINGS CARD STYLES
+   ============================================= */
+.mr-findings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.mr-finding-card {
+  border-radius: 12px;
+  padding: 16px 18px;
+  border: 1.5px solid var(--green-border);
+  background: var(--white);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+  transition: all 0.2s ease-in-out;
+}
+
+.mr-finding-card.high {
+  border-color: #fee2e2;
+  background: #fffbfb;
+}
+
+.mr-finding-card.warning {
+  border-color: #fef3c7;
+  background: #fffdf6;
+}
+
+.mr-finding-card.normal {
+  border-color: #d1fae5;
+  background: #fbfdfc;
+}
+
+.mr-finding-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.mr-finding-badge {
+  font-size: 18px;
+}
+
+.mr-finding-title {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-dark);
+  margin: 0;
+  flex: 1;
+  min-width: 150px;
+}
+
+.mr-finding-severity-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 50px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.mr-finding-severity-pill.high {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.mr-finding-severity-pill.warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.mr-finding-severity-pill.normal {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.mr-finding-vitals-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(0,0,0,0.02);
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(0,0,0,0.02);
+}
+
+.mr-finding-vital-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11.5px;
+}
+
+.mr-finding-vital-name {
+  font-weight: 600;
+  color: var(--text-dark);
+  flex: 1;
+}
+
+.mr-finding-vital-val {
+  font-weight: 700;
+  color: var(--text-dark);
+}
+
+.mr-finding-vital-range {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.mr-finding-interpretation {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-mid);
+  margin: 0;
+}
