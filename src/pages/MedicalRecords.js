@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import { api } from "../utils/api.js";
+import { analyzeLabReport, extractTextFromFile } from "../utils/labReportAnalyzer.js";
 import "./Dashboard.css";
 import "./MedicalRecords.css";
 
@@ -33,6 +34,11 @@ export default function MedicalRecords() {
   const [newNotes, setNewNotes] = useState("");
   const [newVitalsInput, setNewVitalsInput] = useState(""); // E.g. "Metric: Value, Metric: Value"
   const [selectedFile, setSelectedFile] = useState(null);
+  const [reportText, setReportText] = useState("");
+  const [parseStatus, setParseStatus] = useState("");
+  const [parseError, setParseError] = useState("");
+  const [parsedVitalsPreview, setParsedVitalsPreview] = useState([]);
+  const [reportAnalysisPreview, setReportAnalysisPreview] = useState(null);
 
   // Sharing states
   const [activeShareId, setActiveShareId] = useState(null);
@@ -41,10 +47,10 @@ export default function MedicalRecords() {
   // Filter records based on search and category tab
   const filteredRecords = records.filter((r) => {
     const matchesSearch =
-      r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.doctor.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.facility.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.type.toLowerCase().includes(searchQuery.toLowerCase());
+      (r.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (r.doctor || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (r.facility || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (r.type || "").toLowerCase().includes(searchQuery.toLowerCase());
 
     if (!matchesSearch) return false;
 
@@ -57,10 +63,46 @@ export default function MedicalRecords() {
     return false;
   });
 
-  // Handle Mock File Selector
-  const handleFileSelect = (e) => {
+  const runAnalysisForText = (text) => {
+    const result = analyzeLabReport(text);
+    setParsedVitalsPreview(result.vitals);
+    setReportAnalysisPreview(result.analysis);
+    return result;
+  };
+
+  // Handle File Selector and parse readable report text.
+  const handleFileSelect = async (e) => {
     if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+      const file = e.target.files[0];
+      setSelectedFile(file);
+      setParseError("");
+      setParseStatus("Reading report...");
+      if (!newTitle.trim()) {
+        setNewTitle(file.name.replace(/\.[^.]+$/, ""));
+      }
+
+      try {
+        const text = await extractTextFromFile(file);
+        setReportText(text);
+        const result = runAnalysisForText(text);
+        if (!text.trim()) {
+          setParseError("This file did not expose readable text in the browser. Paste the report text below and re-run analysis.");
+        } else if (!result.vitals.length) {
+          setParseError("Readable text was found, but no supported lab values were confidently detected. You can edit/paste text below and re-run analysis.");
+        }
+      } catch (err) {
+        setParseError(err.message || "Unable to read this file. Paste report text manually and re-run analysis.");
+      } finally {
+        setParseStatus("");
+      }
+    }
+  };
+
+  const handleManualReparse = () => {
+    setParseError("");
+    const result = runAnalysisForText(reportText);
+    if (!result.vitals.length) {
+      setParseError("No supported lab values were detected in this text.");
     }
   };
 
@@ -70,8 +112,10 @@ export default function MedicalRecords() {
     if (!newTitle.trim()) return;
     setUploading(true);
 
-    // Parse Vitals string: "HbA1c: 6.0%, Vitamin D: 30"
-    const parsedVitals = [];
+    const reportResult = runAnalysisForText(reportText);
+    const parsedVitals = [...reportResult.vitals];
+
+    // Optional manual additions for values the report layout prevented us from reading.
     if (newVitalsInput.trim()) {
       const parts = newVitalsInput.split(",");
       parts.forEach((part) => {
@@ -79,7 +123,7 @@ export default function MedicalRecords() {
         if (colonIndex !== -1) {
           const name = part.substring(0, colonIndex).trim();
           const value = part.substring(colonIndex + 1).trim();
-          parsedVitals.push({ name, value, range: "Referenced", status: "Normal" });
+          parsedVitals.push({ name, value, range: "Manually added", status: "Normal" });
         }
       });
     }
@@ -101,8 +145,9 @@ export default function MedicalRecords() {
       color,
       doctor: newDoctor || "Dr. Self Reported",
       facility: newFacility || "Personal Upload",
-      notes: newNotes || "No notes provided.",
-      vitals: parsedVitals.length > 0 ? parsedVitals : [{ name: "Document Status", value: "Archived", range: "N/A", status: "Normal" }]
+      notes: newNotes || reportResult.analysis.conclusion,
+      vitals: parsedVitals,
+      analysis: reportResult.analysis,
     };
 
     try {
@@ -123,6 +168,11 @@ export default function MedicalRecords() {
     setNewNotes("");
     setNewVitalsInput("");
     setSelectedFile(null);
+    setReportText("");
+    setParseStatus("");
+    setParseError("");
+    setParsedVitalsPreview([]);
+    setReportAnalysisPreview(null);
     setShowUploadModal(false);
   };
 
@@ -143,6 +193,12 @@ export default function MedicalRecords() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const trendItems = records
+    .flatMap(record => (record.vitals || []).map(vital => ({ ...vital, recordName: record.name, recordDate: record.date })))
+    .filter(vital => vital.name && vital.value)
+    .sort((a, b) => (a.status === "Normal") - (b.status === "Normal"))
+    .slice(0, 6);
 
   return (
     <DashboardLayout activeTab="records">
@@ -296,7 +352,7 @@ export default function MedicalRecords() {
                 </p>
               </div>
 
-              {records.length === 0 ? (
+              {trendItems.length === 0 ? (
                 <div style={{
                   display: "flex",
                   flexDirection: "column",
@@ -317,71 +373,35 @@ export default function MedicalRecords() {
                 </div>
               ) : (
                 <div className="mr-vitals-trends-list">
-                  {/* Glucose trend */}
-                  <div className="mr-trend-item">
-                    <div className="mr-trend-top">
-                      <span className="mr-trend-label">HbA1c (Blood Sugar)</span>
-                      <span className="mr-trend-status warning">Pre-diabetic</span>
-                    </div>
-                    <div className="mr-trend-middle">
-                      <span className="mr-trend-value">6.2%</span>
-                      <span className="mr-trend-change down">↓ -0.3% (from 6.5%)</span>
-                    </div>
-                    <div className="mr-sparkline-wrap">
-                      <span>Aug 24: 6.8%</span>
-                      <div className="mr-spark-bar-container">
-                        <div
-                          className="mr-spark-bar-fill"
-                          style={{ width: "62%", background: "var(--amber)" }}
-                        />
+                  {trendItems.map((vital, index) => (
+                    <div className="mr-trend-item" key={`${vital.recordName}-${vital.name}-${index}`}>
+                      <div className="mr-trend-top">
+                        <span className="mr-trend-label">{vital.name}</span>
+                        <span className={`mr-trend-status ${vital.status === "Normal" ? "normal" : "alert"}`}>
+                          {vital.status}
+                        </span>
                       </div>
-                      <span>Mar 25: 6.2%</span>
-                    </div>
-                  </div>
-
-                  {/* Cholesterol Trend */}
-                  <div className="mr-trend-item">
-                    <div className="mr-trend-top">
-                      <span className="mr-trend-label">Total Cholesterol</span>
-                      <span className="mr-trend-status normal">Optimal</span>
-                    </div>
-                    <div className="mr-trend-middle">
-                      <span className="mr-trend-value">180 mg/dL</span>
-                      <span className="mr-trend-change down">↓ -15 mg/dL (from 195)</span>
-                    </div>
-                    <div className="mr-sparkline-wrap">
-                      <span>Nov 24: 195</span>
-                      <div className="mr-spark-bar-container">
-                        <div
-                          className="mr-spark-bar-fill"
-                          style={{ width: "80%", background: "var(--green-cta)" }}
-                        />
+                      <div className="mr-trend-middle">
+                        <span className="mr-trend-value">{vital.value}</span>
+                        <span className={vital.status === "Normal" ? "mr-trend-change down" : "mr-trend-change up-bad"}>
+                          {vital.status === "Normal" ? "Within range" : "Needs review"}
+                        </span>
                       </div>
-                      <span>Mar 25: 180</span>
-                    </div>
-                  </div>
-
-                  {/* Vitamin D Trend */}
-                  <div className="mr-trend-item">
-                    <div className="mr-trend-top">
-                      <span className="mr-trend-label">Vitamin D3</span>
-                      <span className="mr-trend-status normal">Sufficient</span>
-                    </div>
-                    <div className="mr-trend-middle">
-                      <span className="mr-trend-value">32 ng/mL</span>
-                      <span className="mr-trend-change up-good">↑ +14 ng/mL (from 18)</span>
-                    </div>
-                    <div className="mr-sparkline-wrap">
-                      <span>Aug 23: 18</span>
-                      <div className="mr-spark-bar-container">
-                        <div
-                          className="mr-spark-bar-fill"
-                          style={{ width: "100%", background: "var(--green-cta)" }}
-                        />
+                      <div className="mr-sparkline-wrap">
+                        <span>{vital.recordDate}</span>
+                        <div className="mr-spark-bar-container">
+                          <div
+                            className="mr-spark-bar-fill"
+                            style={{
+                              width: vital.status === "Normal" ? "75%" : "100%",
+                              background: vital.status === "Normal" ? "var(--green-cta)" : "var(--red)",
+                            }}
+                          />
+                        </div>
+                        <span>{vital.recordName}</span>
                       </div>
-                      <span>Mar 25: 32</span>
                     </div>
-                  </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -473,16 +493,16 @@ export default function MedicalRecords() {
                   </div>
 
                   <div className="mr-form-field">
-                    <label className="mr-form-label">Extractable Key Vitals (Optional)</label>
+                    <label className="mr-form-label">Add Missing Values (Optional)</label>
                     <input
                       type="text"
                       className="mr-form-input"
-                      placeholder="Format: Metric: Value, Metric: Value (e.g. TSH: 2.4 mIU/L, Thyroxine: 1.2 ng/dL)"
+                      placeholder="Only if the report text misses something: TSH: 2.4, Vitamin D: 18"
                       value={newVitalsInput}
                       onChange={(e) => setNewVitalsInput(e.target.value)}
                     />
                     <small style={{ fontSize: 10.5, color: "var(--text-muted)", marginTop: 2 }}>
-                      Separate multiple metrics with commas. They will display in your parsed vitals table.
+                      The app now parses the uploaded report first. Use this only for values it cannot read.
                     </small>
                   </div>
 
@@ -520,6 +540,47 @@ export default function MedicalRecords() {
                       </div>
                     )}
                   </div>
+
+                  <div className="mr-form-field">
+                    <div className="mr-ai-field-header">
+                      <label className="mr-form-label">Extracted Report Text</label>
+                      <button type="button" className="mr-inline-btn" onClick={handleManualReparse}>
+                        Re-analyse Text
+                      </button>
+                    </div>
+                    <textarea
+                      rows="6"
+                      className="mr-form-textarea"
+                      placeholder="Upload a text-based PDF/report, or paste the lab result table here if the file is a scanned image."
+                      value={reportText}
+                      onChange={(e) => setReportText(e.target.value)}
+                    />
+                    {parseStatus && <div className="mr-parse-status">{parseStatus}</div>}
+                    {parseError && <div className="mr-parse-error">{parseError}</div>}
+                  </div>
+
+                  {(reportAnalysisPreview || parsedVitalsPreview.length > 0) && (
+                    <div className="mr-ai-preview-card">
+                      <div className="mr-ai-preview-title">
+                        AI Report Interpretation
+                      </div>
+                      {reportAnalysisPreview && (
+                        <>
+                          <h4>{reportAnalysisPreview.headline}</h4>
+                          <p>{reportAnalysisPreview.conclusion}</p>
+                        </>
+                      )}
+                      {parsedVitalsPreview.length > 0 && (
+                        <div className="mr-preview-vitals">
+                          {parsedVitalsPreview.slice(0, 8).map((vital, index) => (
+                            <span key={`${vital.name}-${index}`} className={`mr-preview-pill ${vital.status.toLowerCase()}`}>
+                              {vital.name}: {vital.value} ({vital.status})
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="mr-modal-footer">
@@ -639,23 +700,53 @@ export default function MedicalRecords() {
                         </tr>
                       </thead>
                       <tbody>
-                        {selectedRecord.vitals.map((v, i) => (
-                          <tr key={i}>
-                            <td style={{ fontWeight: 600 }}>{v.name}</td>
-                            <td>{v.value}</td>
-                            <td>
-                              <span style={{ color: "var(--text-muted)" }}>{v.range} </span>
-                              {v.status !== "Normal" && (
-                                <span className={`mr-vitals-status-pill ${v.status.toLowerCase()}`}>
-                                  {v.status}
-                                </span>
-                              )}
+                        {(selectedRecord.vitals || []).length === 0 ? (
+                          <tr>
+                            <td colSpan="3" style={{ color: "var(--text-muted)" }}>
+                              No supported lab values were extracted from this report.
                             </td>
                           </tr>
-                        ))}
+                        ) : (
+                          selectedRecord.vitals.map((v, i) => (
+                            <tr key={i}>
+                              <td style={{ fontWeight: 600 }}>{v.name}</td>
+                              <td>{v.value}</td>
+                              <td>
+                                <span style={{ color: "var(--text-muted)" }}>{v.range} </span>
+                                <span className={`mr-vitals-status-pill ${(v.status || "Normal").toLowerCase()}`}>
+                                  {v.status || "Normal"}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
                       </tbody>
                     </table>
                   </div>
+
+                  {selectedRecord.analysis && (
+                    <div className="mr-viewer-section">
+                      <span className="mr-viewer-label">AI Report Interpretation</span>
+                      <div className="mr-ai-result-card">
+                        <h4>{selectedRecord.analysis.headline}</h4>
+                        <p>{selectedRecord.analysis.conclusion}</p>
+                        {selectedRecord.analysis.possibleConditions?.length > 0 && (
+                          <div className="mr-ai-condition-list">
+                            <strong>Possible follow-up areas:</strong>
+                            <span>{selectedRecord.analysis.possibleConditions.join(", ")}</span>
+                          </div>
+                        )}
+                        {selectedRecord.analysis.recommendations?.length > 0 && (
+                          <ul>
+                            {selectedRecord.analysis.recommendations.map((item, index) => (
+                              <li key={index}>{item}</li>
+                            ))}
+                          </ul>
+                        )}
+                        <small>{selectedRecord.analysis.disclaimer}</small>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="mr-viewer-section">
                     <span className="mr-viewer-label">Clinical Comments</span>

@@ -563,6 +563,108 @@
   gap: 6px;
 }
 
+.mr-ai-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mr-inline-btn {
+  border: 1px solid var(--green-border);
+  border-radius: 50px;
+  background: var(--white);
+  color: var(--green-dark);
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 11px;
+}
+
+.mr-parse-status,
+.mr-parse-error {
+  border-radius: 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.4;
+  padding: 8px 10px;
+}
+
+.mr-parse-status {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.mr-parse-error {
+  background: #fff7ed;
+  color: #9a3412;
+  border: 1px solid #fed7aa;
+}
+
+.mr-ai-preview-card,
+.mr-ai-result-card {
+  background: var(--green-mist);
+  border: 1px solid var(--green-border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+}
+
+.mr-ai-preview-title {
+  color: var(--green-dark);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.mr-ai-preview-card h4,
+.mr-ai-result-card h4 {
+  color: var(--text-dark);
+  font-size: 14px;
+  margin: 0 0 6px;
+}
+
+.mr-ai-preview-card p,
+.mr-ai-result-card p,
+.mr-ai-result-card li,
+.mr-ai-result-card span {
+  color: var(--text-mid);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.mr-preview-vitals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.mr-preview-pill {
+  border-radius: 50px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 9px;
+}
+
+.mr-preview-pill.normal {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.mr-preview-pill.high {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.mr-preview-pill.low {
+  background: #eff6ff;
+  color: #1e40af;
+}
+
 .mr-form-label {
   font-size: 12px;
   font-weight: 700;
@@ -857,6 +959,26 @@
   font-size: 12.5px;
   color: var(--text-mid);
   line-height: 1.5;
+}
+
+.mr-ai-condition-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 10px;
+}
+
+.mr-ai-result-card ul {
+  margin: 10px 0;
+  padding-left: 18px;
+}
+
+.mr-ai-result-card small {
+  color: var(--text-muted);
+  display: block;
+  font-size: 10.5px;
+  line-height: 1.5;
+  margin-top: 8px;
 }
 
 /* Sharing UI */

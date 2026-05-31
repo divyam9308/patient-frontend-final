@@ -4,6 +4,10 @@
 
 import supabase from '../config/supabaseClient.js';
 
+function isMissingAnalysisColumn(error) {
+  return String(error?.message || '').toLowerCase().includes('analysis');
+}
+
 // GET /api/medical-records
 export const getMedicalRecords = async (req, res) => {
   try {
@@ -34,7 +38,8 @@ export const getMedicalRecords = async (req, res) => {
         doctor: r.doctor || 'Dr. Self Reported',
         facility: r.facility || 'Personal Upload',
         notes: r.notes || 'No notes provided.',
-        vitals: r.vitals || []
+        vitals: r.vitals || [],
+        analysis: r.analysis || null
       };
     });
 
@@ -48,13 +53,13 @@ export const getMedicalRecords = async (req, res) => {
 export const uploadMedicalRecord = async (req, res) => {
   try {
     const patientId = req.user.id;
-    const { name, type, size, doctor, facility, notes, vitals, icon, color, fileUrl } = req.body;
+    const { name, type, size, doctor, facility, notes, vitals, icon, color, fileUrl, analysis } = req.body;
 
     if (!name || !type) {
       return res.status(400).json({ error: 'name and type are required' });
     }
 
-    const { data: newRecord, error } = await supabase
+    let { data: newRecord, error } = await supabase
       .from('medical_records')
       .insert({
         patient_id: patientId,
@@ -67,10 +72,34 @@ export const uploadMedicalRecord = async (req, res) => {
         doctor: doctor || 'Dr. Self Reported',
         facility: facility || 'Personal Upload',
         notes: notes || 'No notes provided.',
-        vitals: vitals || []
+        vitals: vitals || [],
+        analysis: analysis || null
       })
       .select()
       .single();
+
+    if (error && isMissingAnalysisColumn(error)) {
+      const fallback = await supabase
+        .from('medical_records')
+        .insert({
+          patient_id: patientId,
+          name,
+          type,
+          size: size || '1.1 MB',
+          file_url: fileUrl || null,
+          icon: icon || '📋',
+          color: color || '#e8f5ee',
+          doctor: doctor || 'Dr. Self Reported',
+          facility: facility || 'Personal Upload',
+          notes: notes || analysis?.conclusion || 'No notes provided.',
+          vitals: vitals || []
+        })
+        .select()
+        .single();
+
+      newRecord = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) {
       return res.status(500).json({ error: error.message });
@@ -90,7 +119,8 @@ export const uploadMedicalRecord = async (req, res) => {
       doctor: newRecord.doctor,
       facility: newRecord.facility,
       notes: newRecord.notes,
-      vitals: newRecord.vitals
+      vitals: newRecord.vitals,
+      analysis: newRecord.analysis || analysis || null
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
