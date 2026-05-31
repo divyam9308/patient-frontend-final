@@ -377,6 +377,19 @@ export const createEmergencyRequest = async (req, res) => {
       return res.status(400).json({ error: arrivalTimeError });
     }
 
+    if (req.user?.id) {
+      const { data: existing } = await supabase
+        .from('emergency_requests')
+        .select('id')
+        .eq('patient_id', req.user.id)
+        .in('status', ['open', 'accepted'])
+        .limit(1);
+      
+      if (existing && existing.length > 0) {
+        return res.status(400).json({ error: 'You already have a booked emergency appointment that is currently active.' });
+      }
+    }
+
     const { data: triage, error: triageError } = await supabase
       .from('triage_requests')
       .select('id, symptoms, severity_result')

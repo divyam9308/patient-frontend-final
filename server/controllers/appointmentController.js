@@ -281,6 +281,12 @@ export const getAppointments = async (req, res) => {
 
     const formattedEmergencies = (emergencyData || []).map(e => {
       const dateObj = new Date(e.requested_arrival_time || e.created_at);
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const date = String(dateObj.getDate()).padStart(2, '0');
+      const hours = String(dateObj.getHours()).padStart(2, '0');
+      const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+
       return {
         id: e.id,
         doc: 'Emergency / Ambulance',
@@ -288,12 +294,12 @@ export const getAppointments = async (req, res) => {
         city: e.hospitals?.cities?.name,
         hospital: e.hospitals?.name,
         appointment_type: 'emergency',
-        day: dateObj.getDate().toString().padStart(2, '0'),
+        day: date,
         mon: dateObj.toLocaleString('en-US', { month: 'short' }).toUpperCase(),
         time: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
-        status: ['open', 'accepted'].includes(e.status) ? 'upcoming' : e.status,
-        appointment_date: dateObj.toISOString().split('T')[0],
-        appointment_time: dateObj.toISOString().split('T')[1].substring(0, 5),
+        status: ['open', 'accepted'].includes(e.status) ? 'upcoming' : (e.status === 'expired' ? 'cancelled' : e.status),
+        appointment_date: `${year}-${month}-${date}`,
+        appointment_time: `${hours}:${minutes}`,
         reason: 'Emergency request (booked via triage)',
       };
     });
@@ -413,6 +419,9 @@ export const createAppointment = async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 };
 
 // ─────────────────────────────────────────────────────────
@@ -421,17 +430,36 @@ export const createAppointment = async (req, res) => {
 export const updateAppointment = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body; // Can only update status for now (e.g. cancelled)
+    const { status } = req.body; // Can only update status for now (e.g. cancelled, completed, missed)
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('appointments')
       .update({ status })
       .eq('id', id)
       .eq('patient_id', req.user.id)
       .select()
-      .single();
+      .maybeSingle();
 
-    if (error) throw error;
+    if (!data) {
+      // Fallback: try emergency_requests
+      const { data: eData, error: eError } = await supabase
+        .from('emergency_requests')
+        .update({ status })
+        .eq('id', id)
+        .eq('patient_id', req.user.id)
+        .select()
+        .maybeSingle();
+        
+      if (eError) throw eError;
+      data = eData;
+    } else if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      return res.status(404).json({ error: 'Appointment not found or not owned by user' });
+    }
+
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -444,13 +472,21 @@ export const updateAppointment = async (req, res) => {
 export const deleteAppointment = async (req, res) => {
   try {
     const { id } = req.params;
-    const { error } = await supabase
+    
+    // Attempt delete on appointments
+    await supabase
       .from('appointments')
       .delete()
       .eq('id', id)
       .eq('patient_id', req.user.id);
+      
+    // Attempt delete on emergency_requests
+    await supabase
+      .from('emergency_requests')
+      .update({ status: 'cancelled' }) // Safer to cancel emergencies rather than hard delete
+      .eq('id', id)
+      .eq('patient_id', req.user.id);
 
-    if (error) throw error;
     res.status(204).send();
   } catch (error) {
     res.status(500).json({ error: error.message });
