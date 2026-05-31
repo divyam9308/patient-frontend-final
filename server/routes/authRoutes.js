@@ -7,13 +7,19 @@ import { register, login, googleVerify, sendEmailOTP, verifyEmailOTP } from '../
 
 const router = express.Router();
 
+// POST /api/auth/register   → Register a new patient (Register.js page)
+router.post('/register', register);
+
+// POST /api/auth/login      → Login existing patient (Login.js page)
+router.post('/login', login);
+
 // POST /api/auth/google-verify → Real Google authentication token verification
 router.post('/google-verify', googleVerify);
 
-// Disable traditional email/password registration and login
-// router.post('/register', register);
-// router.post('/login', login);
-// router.post('/send-otp', sendEmailOTP);
-// router.post('/verify-otp', verifyEmailOTP);
+// POST /api/auth/send-otp   → Send Email OTP
+router.post('/send-otp', sendEmailOTP);
+
+// POST /api/auth/verify-otp → Verify Email OTP
+router.post('/verify-otp', verifyEmailOTP);
 
 export default router;

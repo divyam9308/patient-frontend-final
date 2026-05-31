@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-test('renders HealthCare logo', () => {
+test('renders learn react link', () => {
   render(<App />);
-  const logoElements = screen.getAllByText(/HealthCare/i);
-  expect(logoElements.length).toBeGreaterThan(0);
+  const linkElement = screen.getByText(/learn react/i);
+  expect(linkElement).toBeInTheDocument();
 });
