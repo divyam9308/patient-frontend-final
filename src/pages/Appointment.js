@@ -671,22 +671,7 @@ export default function Appointment() {
                     {a.status === "upcoming" && isPast ? "Past Appointment" : statusStyle.label}
                   </span>
 
-                  {a.status === "upcoming" && !isPast && (
-                    <button
-                      onClick={() => handleCancel(a.id)}
-                      disabled={cancellingId === a.id}
-                      style={{
-                        padding: "6px 16px", borderRadius: 50,
-                        border: "1.5px solid #fecaca", background: "#fff",
-                        color: "#dc2626", fontSize: 12, fontWeight: 600,
-                        cursor: "pointer", opacity: cancellingId === a.id ? 0.6 : 1
-                      }}
-                    >
-                      {cancellingId === a.id ? "Cancelling..." : "Cancel"}
-                    </button>
-                  )}
-
-                  {a.status === "upcoming" && isPast && (
+                  {a.status === "upcoming" && (
                     <div style={{ display: "flex", gap: 6 }}>
                       <button
                         onClick={() => handleUpdateStatus(a.id, "completed")}
@@ -698,16 +683,34 @@ export default function Appointment() {
                       >
                         Completed
                       </button>
-                      <button
-                        onClick={() => handleUpdateStatus(a.id, "missed")}
-                        style={{
-                          padding: "6px 12px", borderRadius: 50,
-                          border: "1.5px solid #fde68a", background: "#fffbeb",
-                          color: "#b45309", fontSize: 12, fontWeight: 600, cursor: "pointer"
-                        }}
-                      >
-                        Missed
-                      </button>
+
+                      {!isPast && (
+                        <button
+                          onClick={() => handleCancel(a.id)}
+                          disabled={cancellingId === a.id}
+                          style={{
+                            padding: "6px 16px", borderRadius: 50,
+                            border: "1.5px solid #fecaca", background: "#fff",
+                            color: "#dc2626", fontSize: 12, fontWeight: 600,
+                            cursor: "pointer", opacity: cancellingId === a.id ? 0.6 : 1
+                          }}
+                        >
+                          {cancellingId === a.id ? "Cancelling..." : "Cancel"}
+                        </button>
+                      )}
+
+                      {isPast && (
+                        <button
+                          onClick={() => handleUpdateStatus(a.id, "missed")}
+                          style={{
+                            padding: "6px 12px", borderRadius: 50,
+                            border: "1.5px solid #fde68a", background: "#fffbeb",
+                            color: "#b45309", fontSize: 12, fontWeight: 600, cursor: "pointer"
+                          }}
+                        >
+                          Missed
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
