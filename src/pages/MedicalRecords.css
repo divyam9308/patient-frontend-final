@@ -668,7 +668,84 @@
 .mr-abnormal-list {
   display: flex;
   flex-direction: column;
+  gap: 12px;
+}
+
+/* New big readable abnormal item */
+.mr-abnormal-item-v2 {
+  background: var(--white);
+  border: 1.5px solid #fee2e2;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mr-abnormal-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
+}
+
+.mr-abnormal-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-dark);
+}
+
+.mr-abnormal-values-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.mr-abnormal-current-val {
+  font-size: 13px;
+  color: #b91c1c;
+  font-weight: 500;
+}
+
+.mr-abnormal-current-val b {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.mr-abnormal-ref-val {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.mr-abnormal-conditions {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.mr-abnormal-conditions-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+}
+
+.mr-abnormal-conditions-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.mr-condition-tag {
+  background: #fff1f2;
+  color: #9f1239;
+  border: 1px solid #fecdd3;
+  border-radius: 50px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
 }
 
 .mr-abnormal-item {

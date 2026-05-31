@@ -595,27 +595,37 @@ export default function MedicalRecords() {
                   {parsedVitalsPreview.length > 0 && (
                     <div className="mr-ai-preview-card">
                       <div className="mr-ai-preview-title">
-                        Abnormal Levels Found
+                        {abnormalPreview.length > 0 ? `⚠️ ${abnormalPreview.length} Abnormal Level${abnormalPreview.length === 1 ? '' : 's'} Detected` : '✅ All Detected Levels Normal'}
                       </div>
                       {abnormalPreview.length > 0 ? (
                         <div className="mr-abnormal-list">
                           {abnormalPreview.map((vital, index) => (
-                            <div key={`${vital.name}-${index}`} className="mr-abnormal-item">
-                              <div>
-                                <strong>{vital.name}</strong>
-                                <span>{vital.value} | Ref: {vital.range}</span>
+                            <div key={`${vital.name}-${index}`} className="mr-abnormal-item-v2">
+                              <div className="mr-abnormal-item-header">
+                                <strong className="mr-abnormal-name">{vital.name}</strong>
+                                <span className={`mr-vitals-status-pill ${vital.status.toLowerCase()}`}>
+                                  {vital.status}
+                                </span>
                               </div>
-                              <span className={`mr-vitals-status-pill ${vital.status.toLowerCase()}`}>
-                                {vital.status}
-                              </span>
+                              <div className="mr-abnormal-values-row">
+                                <span className="mr-abnormal-current-val">Current: <b>{vital.value}</b></span>
+                                <span className="mr-abnormal-ref-val">Normal Range: {vital.range}</span>
+                              </div>
                               {vital.possibleConditions?.length > 0 && (
-                                <small>{vital.possibleConditions.join(", ")}</small>
+                                <div className="mr-abnormal-conditions">
+                                  <span className="mr-abnormal-conditions-label">Possible causes:</span>
+                                  <div className="mr-abnormal-conditions-list">
+                                    {vital.possibleConditions.map((cond, ci) => (
+                                      <span key={ci} className="mr-condition-tag">{cond}</span>
+                                    ))}
+                                  </div>
+                                </div>
                               )}
                             </div>
                           ))}
                         </div>
-                      ) : parsedVitalsPreview.length > 0 && (
-                        <p>No abnormal supported lab levels were detected from the readable values.</p>
+                      ) : (
+                        <p style={{ fontSize: 13, color: 'var(--text-mid)', margin: '8px 0 0' }}>No abnormal supported lab levels were detected from the readable values.</p>
                       )}
                     </div>
                   )}
