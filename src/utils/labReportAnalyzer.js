@@ -1,3 +1,5 @@
+import Tesseract from 'tesseract.js';
+
 const LAB_MARKERS = [
   {
     name: "Hemoglobin",
@@ -141,11 +143,12 @@ const LAB_MARKERS = [
   },
   {
     name: "HbA1c",
-    aliases: ["hba1c", "glycated hemoglobin", "glycosylated hemoglobin"],
+    aliases: ["hba1c", "hba 1c", "glycated hemoglobin", "glycosylated hemoglobin"],
     unit: "%",
     min: 4,
     max: 5.6,
-    high: ["prediabetes", "diabetes mellitus", "poor average glucose control"],
+    criticalMax: 7.0,
+    high: ["prediabetes", "diabetes mellitus", "Type 2 diabetes with suboptimal control"],
   },
   {
     name: "Total Cholesterol",
@@ -177,7 +180,8 @@ const LAB_MARKERS = [
     unit: "mg/dL",
     min: 0,
     max: 150,
-    high: ["dyslipidemia", "metabolic syndrome", "pancreatitis risk when very high"],
+    criticalMax: 200,
+    high: ["mild dyslipidemia", "metabolic syndrome", "pancreatitis risk when very high"],
   },
   {
     name: "VLDL Cholesterol",
@@ -246,16 +250,18 @@ const LAB_MARKERS = [
     unit: "ng/mL",
     min: 30,
     max: 100,
-    low: ["vitamin D deficiency", "bone pain/weakness risk", "osteomalacia risk"],
+    criticalMin: 10,
+    low: ["Vitamin D insufficiency", "Severe Vitamin D deficiency", "bone pain/weakness risk"],
     high: ["vitamin D excess", "hypercalcemia risk"],
   },
   {
     name: "Vitamin B12",
-    aliases: ["vitamin b12", "b12"],
+    aliases: ["vitamin b12", "vitamin b 12", "b12", "b 12"],
     unit: "pg/mL",
     min: 200,
     max: 900,
-    low: ["B12 deficiency", "megaloblastic anemia", "neuropathy risk"],
+    criticalMin: 100,
+    low: ["Vitamin B12 deficiency", "Significant Vitamin B12 deficiency", "megaloblastic anemia", "neuropathy risk"],
   },
   {
     name: "Ferritin",
@@ -466,6 +472,24 @@ const LAB_MARKERS = [
     low: ["vitamin D deficiency", "malnutrition", "refeeding risk"],
     high: ["kidney dysfunction", "parathyroid disorder"],
   },
+  {
+    name: "Homocysteine",
+    aliases: ["homocysteine"],
+    unit: "umol/L",
+    min: 5,
+    max: 15,
+    criticalMax: 30,
+    high: ["Elevated homocysteine increasing cardiovascular risk", "B12/Folate deficiency"],
+  },
+  {
+    name: "Total IgE",
+    aliases: ["ige", "total ige", "immunoglobulin e"],
+    unit: "IU/mL",
+    min: 0,
+    max: 100,
+    criticalMax: 500,
+    high: ["Possible allergic tendency", "asthma", "parasitic infection"],
+  },
 ];
 
 const STOP_WORDS = new Set(["age", "date", "page", "id", "pin", "phone"]);
@@ -645,8 +669,23 @@ function extractNumberAfterAlias(line, alias) {
 function inferStatus(value, marker, reportRange) {
   const min = typeof reportRange?.min === "number" ? reportRange.min : marker.min;
   const max = typeof reportRange?.max === "number" ? reportRange.max : marker.max;
-  if (typeof min === "number" && value < min) return "Low";
-  if (typeof max === "number" && value > max) return "High";
+
+  // 1. Check Alert (Critical)
+  if (typeof marker.criticalMin === "number" && value < marker.criticalMin) return "Alert";
+  if (typeof marker.criticalMax === "number" && value > marker.criticalMax) return "Alert";
+
+  // 2. Check Warning / Abnormal
+  // If value is outside [min, max], it's at least abnormal.
+  if ((typeof min === "number" && value < min) || (typeof max === "number" && value > max)) {
+    // If there is a critical threshold defined for this marker,
+    // then the "just abnormal" range is considered a Warning (Orange).
+    if (typeof marker.criticalMin === "number" || typeof marker.criticalMax === "number") {
+      return "Warning";
+    }
+    // If no critical threshold is defined, any abnormal value defaults to Alert (Red).
+    return "Alert";
+  }
+
   return "Normal";
 }
 
@@ -678,9 +717,12 @@ export function analyzeLabReport(rawText) {
       if (!found) continue;
 
       const status = inferStatus(found.value, marker, found.reportRange);
-      const conditionHints = status === "Low"
+      const min = typeof found.reportRange?.min === "number" ? found.reportRange.min : marker.min;
+      const max = typeof found.reportRange?.max === "number" ? found.reportRange.max : marker.max;
+
+      const conditionHints = (typeof min === "number" && found.value < min)
         ? marker.low || []
-        : status === "High"
+        : (typeof max === "number" && found.value > max)
           ? marker.high || []
           : [];
 
@@ -783,7 +825,13 @@ export async function extractTextFromFile(file) {
   if (isTextLike) return file.text();
 
   if (["png", "jpg", "jpeg", "webp", "heic"].includes(extension) || file.type.startsWith("image/")) {
-    return "";
+    try {
+      const { data: { text } } = await Tesseract.recognize(file, 'eng');
+      return text;
+    } catch (err) {
+      console.error("OCR Error:", err);
+      return "";
+    }
   }
 
   if (file.type === "application/pdf" || extension === "pdf") {
@@ -792,14 +840,43 @@ export async function extractTextFromFile(file) {
     const binary = new TextDecoder("latin1").decode(bytes);
 
     const candidates = [];
+    // Handle (Text) Tj
     const textMatches = binary.match(/\(([^()]{2,})\)\s*Tj/g) || [];
     textMatches.forEach(match => {
       candidates.push(match.replace(/^\(/, "").replace(/\)\s*Tj$/, ""));
     });
 
+    // Handle <Hex> Tj
+    const hexTjMatches = binary.match(/<([0-9A-Fa-f]{2,})>\s*Tj/g) || [];
+    hexTjMatches.forEach(match => {
+      const hex = match.replace(/^</, "").replace(/>\s*Tj$/, "");
+      let str = "";
+      for (let i = 0; i < hex.length; i += 2) {
+        str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+      }
+      if (str.trim()) candidates.push(str);
+    });
+
+    // Handle [ (Text) 10 (Text) ] TJ
     const arrayMatches = binary.match(/\[(.*?)\]\s*TJ/gs) || [];
     arrayMatches.forEach(match => {
-      const pieces = [...match.matchAll(/\(([^()]*)\)/g)].map(piece => piece[1]);
+      const pieces = [];
+      const inner = match.replace(/^\[/, "").replace(/\]\s*TJ$/s, "");
+
+      // Match either (string) or <hex>
+      const partPattern = /\(([^()]*)\)|<([0-9A-Fa-f]+)>/g;
+      let part;
+      while ((part = partPattern.exec(inner)) !== null) {
+        if (part[1] !== undefined) {
+          pieces.push(part[1]);
+        } else if (part[2] !== undefined) {
+          let str = "";
+          for (let i = 0; i < part[2].length; i += 2) {
+            str += String.fromCharCode(parseInt(part[2].substr(i, 2), 16));
+          }
+          pieces.push(str);
+        }
+      }
       if (pieces.length) candidates.push(pieces.join(""));
     });
 
