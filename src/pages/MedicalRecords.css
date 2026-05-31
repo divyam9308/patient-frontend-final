@@ -665,6 +665,47 @@
   color: #1e40af;
 }
 
+.mr-abnormal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mr-abnormal-item {
+  background: var(--white);
+  border: 1px solid var(--green-border);
+  border-radius: var(--radius-sm);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  padding: 10px 12px;
+}
+
+.mr-abnormal-item strong,
+.mr-abnormal-item span,
+.mr-abnormal-item small {
+  display: block;
+}
+
+.mr-abnormal-item strong {
+  color: var(--text-dark);
+  font-size: 12.5px;
+  margin-bottom: 2px;
+}
+
+.mr-abnormal-item span {
+  color: var(--text-mid);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.mr-abnormal-item small {
+  color: var(--text-muted);
+  font-size: 11px;
+  grid-column: 1 / -1;
+  line-height: 1.45;
+}
+
 .mr-form-label {
   font-size: 12px;
   font-weight: 700;
@@ -735,11 +776,34 @@
   gap: 8px;
   background: var(--green-pale);
   color: var(--green-dark);
-  padding: 6px 14px;
+  padding: 6px 8px 6px 14px;
   border-radius: 50px;
   font-size: 12px;
   font-weight: 600;
   margin-top: 10px;
+}
+
+.mr-selected-file-badge span {
+  max-width: min(420px, 72vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mr-selected-file-badge button {
+  border: 1px solid rgba(45, 106, 63, 0.25);
+  border-radius: 50px;
+  background: var(--white);
+  color: var(--green-dark);
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 9px;
+}
+
+.mr-selected-file-badge button:hover {
+  background: var(--green-mist);
 }
 
 /* =============================================

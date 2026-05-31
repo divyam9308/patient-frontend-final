@@ -38,7 +38,6 @@ export default function MedicalRecords() {
   const [parseStatus, setParseStatus] = useState("");
   const [parseError, setParseError] = useState("");
   const [parsedVitalsPreview, setParsedVitalsPreview] = useState([]);
-  const [reportAnalysisPreview, setReportAnalysisPreview] = useState(null);
 
   // Sharing states
   const [activeShareId, setActiveShareId] = useState(null);
@@ -66,8 +65,17 @@ export default function MedicalRecords() {
   const runAnalysisForText = (text) => {
     const result = analyzeLabReport(text);
     setParsedVitalsPreview(result.vitals);
-    setReportAnalysisPreview(result.analysis);
     return result;
+  };
+
+  const clearSelectedFile = () => {
+    setSelectedFile(null);
+    setReportText("");
+    setParseStatus("");
+    setParseError("");
+    setParsedVitalsPreview([]);
+    const input = document.getElementById("file-upload-input");
+    if (input) input.value = "";
   };
 
   // Handle File Selector and parse readable report text.
@@ -87,23 +95,15 @@ export default function MedicalRecords() {
         setReportText(text);
         const result = runAnalysisForText(text);
         if (!text.trim()) {
-          setParseError("This file did not expose readable text in the browser. Paste the report text below and re-run analysis.");
+          setParseError("This file did not expose readable lab values. Add the important values manually below if it is a scanned image.");
         } else if (!result.vitals.length) {
-          setParseError("Readable text was found, but no supported lab values were confidently detected. You can edit/paste text below and re-run analysis.");
+          setParseError("Readable text was found, but no supported lab values were confidently detected. Add missing values manually below if needed.");
         }
       } catch (err) {
-        setParseError(err.message || "Unable to read this file. Paste report text manually and re-run analysis.");
+        setParseError(err.message || "Unable to read this file. Add the important values manually below if needed.");
       } finally {
         setParseStatus("");
       }
-    }
-  };
-
-  const handleManualReparse = () => {
-    setParseError("");
-    const result = runAnalysisForText(reportText);
-    if (!result.vitals.length) {
-      setParseError("No supported lab values were detected in this text.");
     }
   };
 
@@ -116,18 +116,21 @@ export default function MedicalRecords() {
     const reportResult = runAnalysisForText(reportText);
     const parsedVitals = [...reportResult.vitals];
 
-    // Optional manual additions for values the report layout prevented us from reading.
     if (newVitalsInput.trim()) {
-      const parts = newVitalsInput.split(",");
-      parts.forEach((part) => {
-        const colonIndex = part.indexOf(":");
-        if (colonIndex !== -1) {
-          const name = part.substring(0, colonIndex).trim();
-          const value = part.substring(colonIndex + 1).trim();
-          parsedVitals.push({ name, value, range: "Manually added", status: "Normal" });
+      const manualResult = analyzeLabReport(newVitalsInput.replace(/,/g, "\n"));
+      manualResult.vitals.forEach((manualVital) => {
+        const existingIndex = parsedVitals.findIndex(vital => vital.name === manualVital.name);
+        if (existingIndex === -1) {
+          parsedVitals.push(manualVital);
+        } else {
+          parsedVitals[existingIndex] = manualVital;
         }
       });
     }
+
+    const finalAnalysis = analyzeLabReport(
+      `${reportText}\n${newVitalsInput.replace(/,/g, "\n")}`
+    ).analysis;
 
     // Assign color based on category
     let color = "#e8f5ee";
@@ -146,9 +149,13 @@ export default function MedicalRecords() {
       color,
       doctor: newDoctor || "Dr. Self Reported",
       facility: newFacility || "Personal Upload",
-      notes: newNotes || reportResult.analysis.conclusion,
+      notes: newNotes || (
+        finalAnalysis.abnormalCount
+          ? `${finalAnalysis.abnormalCount} abnormal lab level${finalAnalysis.abnormalCount === 1 ? "" : "s"} detected.`
+          : "No abnormal supported lab levels detected."
+      ),
       vitals: parsedVitals,
-      analysis: reportResult.analysis,
+      analysis: finalAnalysis,
     };
 
     try {
@@ -173,7 +180,6 @@ export default function MedicalRecords() {
     setParseStatus("");
     setParseError("");
     setParsedVitalsPreview([]);
-    setReportAnalysisPreview(null);
     setShowUploadModal(false);
   };
 
@@ -197,9 +203,14 @@ export default function MedicalRecords() {
 
   const trendItems = records
     .flatMap(record => (record.vitals || []).map(vital => ({ ...vital, recordName: record.name, recordDate: record.date })))
-    .filter(vital => vital.name && vital.value)
+    .filter(vital => vital.name && vital.value && vital.status !== "Normal")
     .sort((a, b) => (a.status === "Normal") - (b.status === "Normal"))
     .slice(0, 6);
+
+  const abnormalPreview = parsedVitalsPreview.filter(vital => vital.status !== "Normal");
+  const abnormalRecordVitals = selectedRecord
+    ? (selectedRecord.vitals || []).filter(vital => vital.status !== "Normal")
+    : [];
 
   return (
     <DashboardLayout activeTab="records">
@@ -494,16 +505,16 @@ export default function MedicalRecords() {
                   </div>
 
                   <div className="mr-form-field">
-                    <label className="mr-form-label">Add Missing Values (Optional)</label>
+                    <label className="mr-form-label">Add Missing Lab Values (Optional)</label>
                     <input
                       type="text"
                       className="mr-form-input"
-                      placeholder="Only if the report text misses something: TSH: 2.4, Vitamin D: 18"
+                      placeholder="Only if the upload misses something: TSH: 7.8, Vitamin D: 18"
                       value={newVitalsInput}
                       onChange={(e) => setNewVitalsInput(e.target.value)}
                     />
                     <small style={{ fontSize: 10.5, color: "var(--text-muted)", marginTop: 2 }}>
-                      The app now parses the uploaded report first. Use this only for values it cannot read.
+                      The app classifies these values too. Use commas between values.
                     </small>
                   </div>
 
@@ -537,48 +548,42 @@ export default function MedicalRecords() {
 
                     {selectedFile && (
                       <div className="mr-selected-file-badge">
+                        <span>
                         📄 {selectedFile.name} ({(selectedFile.size / 1024).toFixed(0)} KB)
+                        </span>
+                        <button type="button" onClick={clearSelectedFile}>
+                          Remove
+                        </button>
                       </div>
                     )}
-                  </div>
-
-                  <div className="mr-form-field">
-                    <div className="mr-ai-field-header">
-                      <label className="mr-form-label">Extracted Report Text</label>
-                      <button type="button" className="mr-inline-btn" onClick={handleManualReparse}>
-                        Re-analyse Text
-                      </button>
-                    </div>
-                    <textarea
-                      rows="6"
-                      className="mr-form-textarea"
-                      placeholder="Upload a text-based PDF/report, or paste the lab result table here if the file is a scanned image."
-                      value={reportText}
-                      onChange={(e) => setReportText(e.target.value)}
-                    />
                     {parseStatus && <div className="mr-parse-status">{parseStatus}</div>}
                     {parseError && <div className="mr-parse-error">{parseError}</div>}
                   </div>
 
-                  {(reportAnalysisPreview || parsedVitalsPreview.length > 0) && (
+                  {parsedVitalsPreview.length > 0 && (
                     <div className="mr-ai-preview-card">
                       <div className="mr-ai-preview-title">
-                        AI Report Interpretation
+                        Abnormal Levels Found
                       </div>
-                      {reportAnalysisPreview && (
-                        <>
-                          <h4>{reportAnalysisPreview.headline}</h4>
-                          <p>{reportAnalysisPreview.conclusion}</p>
-                        </>
-                      )}
-                      {parsedVitalsPreview.length > 0 && (
-                        <div className="mr-preview-vitals">
-                          {parsedVitalsPreview.slice(0, 8).map((vital, index) => (
-                            <span key={`${vital.name}-${index}`} className={`mr-preview-pill ${vital.status.toLowerCase()}`}>
-                              {vital.name}: {vital.value} ({vital.status})
-                            </span>
+                      {abnormalPreview.length > 0 ? (
+                        <div className="mr-abnormal-list">
+                          {abnormalPreview.map((vital, index) => (
+                            <div key={`${vital.name}-${index}`} className="mr-abnormal-item">
+                              <div>
+                                <strong>{vital.name}</strong>
+                                <span>{vital.value} | Ref: {vital.range}</span>
+                              </div>
+                              <span className={`mr-vitals-status-pill ${vital.status.toLowerCase()}`}>
+                                {vital.status}
+                              </span>
+                              {vital.possibleConditions?.length > 0 && (
+                                <small>{vital.possibleConditions.join(", ")}</small>
+                              )}
+                            </div>
                           ))}
                         </div>
+                      ) : parsedVitalsPreview.length > 0 && (
+                        <p>No abnormal supported lab levels were detected from the readable values.</p>
                       )}
                     </div>
                   )}
@@ -643,7 +648,7 @@ export default function MedicalRecords() {
                     {/* Show structured table mockup */}
                     <div className="mr-doc-table-mock">
                       <div className="mr-doc-table-header"></div>
-                      {selectedRecord.vitals.map((v, i) => (
+                      {(selectedRecord.vitals || []).map((v, i) => (
                         <div className="mr-doc-table-row" key={i}>
                           <div className="mr-doc-table-cell" style={{ width: "30%" }}></div>
                           <div className="mr-doc-table-cell" style={{ width: "20%" }}></div>
@@ -691,7 +696,7 @@ export default function MedicalRecords() {
                   </div>
 
                   <div className="mr-viewer-section">
-                    <span className="mr-viewer-label">Parsed Health Vitals & Observations</span>
+                    <span className="mr-viewer-label">Abnormal Lab Levels</span>
                     <table className="mr-vitals-table">
                       <thead>
                         <tr>
@@ -701,14 +706,14 @@ export default function MedicalRecords() {
                         </tr>
                       </thead>
                       <tbody>
-                        {(selectedRecord.vitals || []).length === 0 ? (
+                        {abnormalRecordVitals.length === 0 ? (
                           <tr>
                             <td colSpan="3" style={{ color: "var(--text-muted)" }}>
-                              No supported lab values were extracted from this report.
+                              No abnormal supported lab levels were detected from this report.
                             </td>
                           </tr>
                         ) : (
-                          selectedRecord.vitals.map((v, i) => (
+                          abnormalRecordVitals.map((v, i) => (
                             <tr key={i}>
                               <td style={{ fontWeight: 600 }}>{v.name}</td>
                               <td>{v.value}</td>
@@ -725,26 +730,27 @@ export default function MedicalRecords() {
                     </table>
                   </div>
 
-                  {selectedRecord.analysis && (
+                  {abnormalRecordVitals.length > 0 && (
                     <div className="mr-viewer-section">
-                      <span className="mr-viewer-label">AI Report Interpretation</span>
+                      <span className="mr-viewer-label">Abnormal Level Interpretation</span>
                       <div className="mr-ai-result-card">
-                        <h4>{selectedRecord.analysis.headline}</h4>
-                        <p>{selectedRecord.analysis.conclusion}</p>
-                        {selectedRecord.analysis.possibleConditions?.length > 0 && (
-                          <div className="mr-ai-condition-list">
-                            <strong>Possible follow-up areas:</strong>
-                            <span>{selectedRecord.analysis.possibleConditions.join(", ")}</span>
-                          </div>
-                        )}
-                        {selectedRecord.analysis.recommendations?.length > 0 && (
-                          <ul>
-                            {selectedRecord.analysis.recommendations.map((item, index) => (
-                              <li key={index}>{item}</li>
-                            ))}
-                          </ul>
-                        )}
-                        <small>{selectedRecord.analysis.disclaimer}</small>
+                        <div className="mr-abnormal-list">
+                          {abnormalRecordVitals.map((vital, index) => (
+                            <div key={`${vital.name}-${index}`} className="mr-abnormal-item">
+                              <div>
+                                <strong>{vital.name}</strong>
+                                <span>{vital.value} | Ref: {vital.range}</span>
+                              </div>
+                              <span className={`mr-vitals-status-pill ${(vital.status || "Normal").toLowerCase()}`}>
+                                {vital.status || "Normal"}
+                              </span>
+                              {vital.possibleConditions?.length > 0 && (
+                                <small>{vital.possibleConditions.join(", ")}</small>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        <small>{selectedRecord.analysis?.disclaimer || "This is not a diagnosis. Confirm abnormal results with a qualified clinician."}</small>
                       </div>
                     </div>
                   )}
