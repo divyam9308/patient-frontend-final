@@ -718,6 +718,7 @@ function parseCategoricalReferenceFromTail(tail) {
   const rangeValuePattern = "(?:<=|>=|<|>|=)?\\s*\\d+(?:\\.\\d+)?(?:\\s*(?:-|to|\\u2013|\\u2014|â€“|â€”|-)\\s*\\d+(?:\\.\\d+)?)?";
   const categoryPattern = new RegExp(`\\b(${escapedLabels})\\s*:?\\s*(${rangeValuePattern})`, "gi");
   const parts = [];
+  const bands = [];
   let inferredMax = null;
   let match;
 
@@ -725,12 +726,21 @@ function parseCategoricalReferenceFromTail(tail) {
     const rawLabel = match[1].toLowerCase();
     const rawValue = match[2].trim();
     const label = rawLabel.replace(/\b\w/g, char => char.toUpperCase());
-    const value = rawValue.replace(/\s+/g, "");
+    const parsedBand = parseCategoricalBand(rawLabel, rawValue);
+    if (!parsedBand) continue;
+
+    const value = parsedBand.text;
     const upperMatch = rawValue.match(/^<\s*=?\s*(\d+(?:\.\d+)?)/);
     if (upperMatch && ["desirable", "optimal", "normal"].includes(rawLabel) && inferredMax === null) {
       inferredMax = Number(upperMatch[1]);
     }
     parts.push(`${label}: ${value}`);
+    bands.push({
+      label,
+      labelKey: rawLabel,
+      min: parsedBand.min,
+      max: parsedBand.max,
+    });
   }
 
   const upToPattern = /\b(up to|upto)\s*:?\s*(\d+(?:\.\d+)?)/gi;
@@ -744,7 +754,37 @@ function parseCategoricalReferenceFromTail(tail) {
     min: null,
     max: inferredMax,
     text: [...new Set(parts)].join("; "),
+    bands,
   };
+}
+
+function parseCategoricalBand(label, value) {
+  const normalizedValue = String(value || "").replace(/\s+/g, "");
+  if (!normalizedValue) return null;
+
+  if (/^0\d{6,}$/.test(normalizedValue) && label === "near to above optimal") {
+    return { min: 100, max: 129, text: "100-129" };
+  }
+
+  const rangeMatch = normalizedValue.match(/^(-?\d+(?:\.\d+)?)(?:-|to|\u2013|\u2014|â€“|â€”|Ã¢â‚¬â€œ|Ã¢â‚¬â€)(-?\d+(?:\.\d+)?)$/i);
+  if (rangeMatch) {
+    const min = Number(rangeMatch[1]);
+    const max = Number(rangeMatch[2]);
+    if (min <= max) return { min, max, text: `${rangeMatch[1]}-${rangeMatch[2]}` };
+    return null;
+  }
+
+  const upperMatch = normalizedValue.match(/^<\s*=?\s*(-?\d+(?:\.\d+)?)$/);
+  if (upperMatch) {
+    return { min: null, max: Number(upperMatch[1]), text: `<${upperMatch[1]}` };
+  }
+
+  const lowerMatch = normalizedValue.match(/^>\s*=?\s*(-?\d+(?:\.\d+)?)$/);
+  if (lowerMatch) {
+    return { min: Number(lowerMatch[1]), max: null, text: `>${lowerMatch[1]}` };
+  }
+
+  return null;
 }
 
 function parseReferenceImmediatelyAfterValue(tail) {
@@ -971,11 +1011,32 @@ function isPhysiologicallyRealistic(value, marker, reportRange) {
 function statusFromRange(value, prefix, reportRange) {
   if (!reportRange) return "uncertain";
 
+  const categoricalStatus = statusFromCategoricalBands(value, reportRange);
+  if (categoricalStatus) return categoricalStatus;
+
   if (typeof reportRange.min === "number" && value < reportRange.min) return "low";
   if (typeof reportRange.max === "number" && value > reportRange.max) return "high";
   if (prefix === "<" && typeof reportRange.max === "number" && value <= reportRange.max) return "normal";
   if (prefix === ">" && typeof reportRange.min === "number" && value >= reportRange.min) return "normal";
   return "normal";
+}
+
+function statusFromCategoricalBands(value, reportRange) {
+  if (!Array.isArray(reportRange?.bands) || !Number.isFinite(value)) return null;
+
+  const matchedBand = reportRange.bands.find(band => {
+    const aboveMin = typeof band.min === "number" ? value >= band.min : true;
+    const belowMax = typeof band.max === "number" ? value <= band.max : true;
+    return aboveMin && belowMax;
+  });
+  if (!matchedBand) return null;
+
+  const label = String(matchedBand.labelKey || "").toLowerCase();
+  if (/\b(low|deficient)\b/.test(label)) return "low";
+  if (/\b(very high|high)\b/.test(label) && !/\bborderline\b/.test(label)) return "high";
+  if (/\b(borderline|near|above optimal|elevated)\b/.test(label)) return "borderline";
+  if (/\b(optimal|desirable|normal)\b/.test(label)) return "normal";
+  return null;
 }
 
 function extractNumberAfterAlias(matchObj, alias, marker, lines) {

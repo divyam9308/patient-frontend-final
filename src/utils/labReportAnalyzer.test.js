@@ -51,4 +51,22 @@ describe("analyzeLabReport range extraction", () => {
       valid: true,
     });
   });
+
+  test("uses LDL categorical bands instead of marking near-optimal values high", () => {
+    const report = [
+      "LDL Cholesterol",
+      "100.39",
+      "Optimal <100 Near To Above Optimal 022321600126 Borderline High 130-159 High >160 mg/dL",
+    ].join("\n");
+
+    const ldl = analyzeLabReport(report).vitals.find(vital => vital.name === "LDL Cholesterol");
+
+    expect(ldl).toMatchObject({
+      value: "100.39",
+      numericValue: 100.39,
+      range: "Optimal: <100; Near To Above Optimal: 100-129; Borderline High: 130-159; High: >160",
+      status: "borderline",
+      valid: true,
+    });
+  });
 });
