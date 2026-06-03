@@ -141,7 +141,7 @@ const LAB_MARKERS = [
   },
   {
     name: "HbA1c",
-    aliases: ["hba1c", "glycated hemoglobin", "glycosylated hemoglobin"],
+    aliases: ["hba1c", "hba 1c", "glycated hemoglobin", "glycosylated hemoglobin"],
     unit: "%",
     min: 4,
     max: 5.6,
@@ -543,6 +543,7 @@ const LAB_MARKERS = [
 const STOP_WORDS = new Set(["age", "date", "page", "id", "pin", "phone"]);
 const MAX_ANALYSIS_TEXT_LENGTH = 200000;
 const MAX_PDF_PARSE_BYTES = 10485760; // 10MB
+const HBA1C_REFERENCE_RANGE_TEXT = "Diabetes >6.5%, Prediabetes 5.7-6.4%, Normal <5.7%";
 
 function normalizeText(text) {
   return String(text || "")
@@ -599,6 +600,11 @@ function isDifferentMarkerLine(line, currentAlias) {
       && new RegExp(rowAliasPattern(alias), "i").test(line)
     )
   );
+}
+
+function isIgnoredNarrativeLine(line) {
+  const value = String(line || "").toLowerCase();
+  return /\b(explanation|interpretation|references?|footnotes?|citations?|bibliography|journal|doi|et al|volume|vol\.|pages?|pp\.)\b/.test(value);
 }
 
 function getReferenceRangeMatches(tail) {
@@ -818,8 +824,33 @@ function hasInvalidRawUnit(unit) {
   return Boolean(unit.rawUnit && !unit.valid);
 }
 
+function isHbA1cMarker(marker) {
+  return marker.name === "HbA1c";
+}
+
+function getHbA1cReferenceRange() {
+  return {
+    min: 0,
+    max: 5.6,
+    text: HBA1C_REFERENCE_RANGE_TEXT,
+  };
+}
+
+function isHbA1cStructuredResultTail(tail, candidate) {
+  const beforeValue = tail
+    .slice(0, candidate.start)
+    .replace(/\b(result|observed|value|reading|level)\b/gi, "")
+    .trim();
+
+  return /^[\s.:=|_-]*$/.test(beforeValue);
+}
+
 function isPhysiologicallyRealistic(value, marker, reportRange) {
   if (!Number.isFinite(value) || value < 0) return false;
+  if (isHbA1cMarker(marker)) {
+    return value >= 2 && value <= 20;
+  }
+
   if (reportRange && (typeof reportRange.min === "number" || typeof reportRange.max === "number")) {
     const lower = typeof reportRange.min === "number" ? Math.max(0, reportRange.min / 10) : 0;
     const upper = typeof reportRange.max === "number" ? reportRange.max * 20 + 10 : 100000;
@@ -848,8 +879,13 @@ function extractNumberAfterAlias(matchObj, alias, marker, lines) {
   const index = matchObj.index;
   let line = typeof row === "string" ? row : row.text;
   const sourcePage = typeof row === "string" ? 1 : row.page;
+  const isHbA1c = isHbA1cMarker(marker);
 
-  if (lines && typeof index === "number") {
+  if (isHbA1c && isIgnoredNarrativeLine(line)) {
+    return null;
+  }
+
+  if (!isHbA1c && lines && typeof index === "number") {
     for (let i = 1; i <= 3; i++) {
       if (lines[index + i]) {
         const nextLine = typeof lines[index + i] === "string" ? lines[index + i] : lines[index + i].text;
@@ -869,7 +905,7 @@ function extractNumberAfterAlias(matchObj, alias, marker, lines) {
 
   const tail = line.slice((match.index || 0) + match[0].length);
   const ranges = getReferenceRangeMatches(tail);
-  const reportRange = parseReferenceFromTail(tail);
+  const reportRange = isHbA1c ? getHbA1cReferenceRange() : parseReferenceFromTail(tail);
   const candidates = getResultCandidates(tail, ranges);
 
   if (candidates.length === 0) {
@@ -885,6 +921,25 @@ function extractNumberAfterAlias(matchObj, alias, marker, lines) {
 
   const result = candidates[0];
   const unit = extractUnitAfterValue(tail, result, marker);
+  if (isHbA1c && (!isHbA1cStructuredResultTail(tail, result) || !unit.valid || unit.unit !== "%" || result.value < 2 || result.value > 20)) {
+    return {
+      prefix: result.prefix,
+      value: result.value,
+      valueText: result.valueText,
+      unit: unit.unit,
+      rawUnit: unit.rawUnit,
+      raw: line.trim(),
+      reportRange,
+      abnormalFlag: "",
+      status: "uncertain",
+      confidence: 0,
+      reason: "HbA1c result must be a same-row percentage between 2.0 and 20.0",
+      source_page: sourcePage || 0,
+      page: sourcePage || 0,
+      valid: false,
+    };
+  }
+
   const explicitFlag = extractExplicitFlag(tail);
   const realistic = isPhysiologicallyRealistic(result.value, marker, reportRange);
 
@@ -937,6 +992,7 @@ function extractNumberAfterAlias(matchObj, alias, marker, lines) {
 
 function buildRange(marker, reportRange, unitOverride = marker.unit) {
   if (reportRange?.text) {
+    if (isHbA1cMarker(marker)) return reportRange.text;
     return `${reportRange.text} ${unitOverride || ""}`.trim();
   }
   return "";
@@ -1261,9 +1317,11 @@ export function analyzeLabReport(rawText) {
       const markerLines = findMarkerLines(lines, alias);
       if (markerLines.length === 0 || seen.has(marker.name)) continue;
 
-      const found = markerLines
-        .map(matchObj => extractNumberAfterAlias(matchObj, alias, marker, lines))
-        .find(result => result && (result.status === "uncertain" || !Number.isNaN(result.value)));
+      const extractedResults = markerLines
+        .map(matchObj => extractNumberAfterAlias(matchObj, alias, marker, lines));
+      const found = isHbA1cMarker(marker)
+        ? extractedResults.find(result => result?.valid)
+        : extractedResults.find(result => result && (result.status === "uncertain" || !Number.isNaN(result.value)));
       if (!found) continue;
 
       const resultValue = found.valueText || "";
@@ -1272,6 +1330,7 @@ export function analyzeLabReport(rawText) {
 
       vitals.push({
         test_name: marker.name,
+        testName: marker.name,
         name: marker.name,
         value: resultValue,
         numericValue: found.value,
