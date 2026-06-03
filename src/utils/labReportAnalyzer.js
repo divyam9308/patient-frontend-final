@@ -10,7 +10,7 @@ const LAB_MARKERS = [
   },
   {
     name: "WBC Count",
-    aliases: ["wbc", "white blood cell", "total leukocyte count", "tlc"],
+    aliases: ["wbc count", "wbc", "white blood cell", "total leukocyte count", "tlc"],
     unit: "cells/uL",
     min: 4000,
     max: 11000,
@@ -115,11 +115,27 @@ const LAB_MARKERS = [
   },
   {
     name: "CRP",
-    aliases: ["crp", "c reactive protein", "c-reactive protein"],
+    aliases: ["crp", "c reactive protein", "c-reactive protein", "cardio c-reactive protein", "hscrp"],
     unit: "mg/L",
     min: 0,
     max: 5,
     high: ["acute inflammation", "infection", "autoimmune flare"],
+  },
+  {
+    name: "Apolipoprotein B",
+    aliases: ["apolipoprotein b", "apo b", "apob"],
+    unit: "mg/dL",
+    min: 46,
+    max: 174,
+    high: ["increased cardiovascular risk", "atherogenic particle burden"],
+  },
+  {
+    name: "Troponin I",
+    aliases: ["troponin i", "troponin- i", "troponin-i", "high sensitive troponin", "hstni", "hs trop i"],
+    unit: "ng/L",
+    min: 0,
+    max: 12,
+    high: ["cardiac muscle injury risk", "cardiovascular risk"],
   },
   {
     name: "Fasting Glucose",
@@ -543,6 +559,7 @@ const LAB_MARKERS = [
 const STOP_WORDS = new Set(["age", "date", "page", "id", "pin", "phone"]);
 const MAX_ANALYSIS_TEXT_LENGTH = 200000;
 const MAX_PDF_PARSE_BYTES = 10485760; // 10MB
+const MAX_OCR_PDF_PAGES = 8;
 const HBA1C_REFERENCE_RANGE_TEXT = "Diabetes >6.5%, Prediabetes 5.7-6.4%, Normal <5.7%";
 const CATEGORICAL_RANGE_LABELS = [
   "near to above optimal",
@@ -568,12 +585,18 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function normalizePrivateUsePdfText(text) {
+  return String(text || "").replace(/[\uF000-\uF0FF]/g, char =>
+    String.fromCharCode(char.charCodeAt(0) & 0xff)
+  );
+}
+
 function rowAliasPattern(alias) {
   return `(?:^|\\s)(?:\\d+[.)-]?\\s+)?${escapeRegExp(alias)}(?=$|[^A-Za-z0-9])`;
 }
 
 function extractLines(rawText) {
-  const normalized = normalizeText(rawText).slice(0, MAX_ANALYSIS_TEXT_LENGTH);
+  const normalized = normalizeText(normalizePrivateUsePdfText(rawText)).slice(0, MAX_ANALYSIS_TEXT_LENGTH);
   const sourceLines = normalized
     .split(/\n+/)
     .map(line => line.trim())
@@ -664,6 +687,41 @@ function getReferenceRangeMatches(tail) {
   }
 
   return ranges;
+}
+
+function getKnownUnitTokens() {
+  return Object.entries(UNIT_ALIASES)
+    .flatMap(([unit, aliases]) => [unit, ...aliases])
+    .map(normalizeUnitText)
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+}
+
+function getUnitPrefixedReferenceRange(tail) {
+  const normalizedTail = normalizeUnitText(tail);
+  const unitTokens = getKnownUnitTokens();
+
+  for (const unit of unitTokens) {
+    const unitIndex = normalizedTail.indexOf(unit);
+    if (unitIndex < 0) continue;
+
+    const afterUnitStart = unitIndex + unit.length;
+    const afterUnit = tail.slice(afterUnitStart).trimStart();
+    const leadingSpace = tail.slice(afterUnitStart).length - afterUnit.length;
+    const reference = parseReferenceImmediatelyAfterValue(afterUnit);
+    if (!reference) continue;
+
+    const referenceStart = afterUnitStart + leadingSpace;
+    const referenceText = afterUnit.slice(0, reference.text.length);
+
+    return {
+      ...reference,
+      start: referenceStart,
+      end: referenceStart + referenceText.length,
+    };
+  }
+
+  return null;
 }
 
 function parseReferenceFromTail(tail) {
@@ -830,7 +888,11 @@ function isInsideRanges(index, ranges) {
 }
 
 function startsWithReferenceRangeText(text) {
-  return Boolean(parseReferenceImmediatelyAfterValue(text));
+  const normalizedText = String(text || "").replace(/\s+/g, " ").trim();
+  return /^-?\d+(?:\.\d+)?\s*(?:-|to|\u2013|\u2014|â€“|â€”|Ã¢â‚¬â€œ|Ã¢â‚¬â€)\s*-?\d+(?:\.\d+)?/i.test(normalizedText)
+    || /^(?:<|<=|less than|upto|up to)\s*-?\d+(?:\.\d+)?/i.test(normalizedText)
+    || /^(?:>|>=|more than|above)\s*-?\d+(?:\.\d+)?/i.test(normalizedText)
+    || Boolean(parseCategoricalReferenceFromTail(normalizedText));
 }
 
 function isDescriptorNumber(tail, numberMatch) {
@@ -871,12 +933,63 @@ function getResultCandidates(tail, ranges) {
     }));
 }
 
+function getTrailingResultCandidate(tail, ranges) {
+  const candidates = getResultCandidates(tail, ranges);
+  if (candidates.length <= 1) return candidates[0] || null;
+
+  const normalizedTail = normalizeUnitText(tail);
+  const knownUnits = getKnownUnitTokens();
+  const hasUnitBeforeRange = ranges.some(range => {
+    const beforeRange = normalizedTail.slice(0, range.start);
+    return knownUnits.some(unit => beforeRange.includes(unit));
+  });
+  const firstCandidate = candidates[0];
+  const hasUnitBeforeFirstCandidate = knownUnits.some(unit =>
+    normalizedTail.slice(0, firstCandidate.start).includes(unit)
+  );
+
+  return (hasUnitBeforeRange || (hasUnitBeforeFirstCandidate && firstCandidate.prefix))
+    ? candidates[candidates.length - 1]
+    : candidates[0];
+}
+
+function startsWithResultValue(tail) {
+  return /^\s*(?:result|observed|value|reading|level)?\s*[:=-]?\s*[<>]?\s*-?\d+(?:\.\d+)?/i.test(tail);
+}
+
+function findNearbyStandaloneResultTail(lines, index, marker) {
+  if (!lines || typeof index !== "number") return null;
+
+  const expectedUnits = getExpectedUnits(marker);
+  const offsets = [-1, 1, -2, 2];
+
+  for (const offset of offsets) {
+    const row = lines[index + offset];
+    if (!row) continue;
+
+    const text = typeof row === "string" ? row : row.text;
+    const normalizedText = normalizeUnitText(normalizePrivateUsePdfText(text));
+    if (!/^\s*[<>]?\s*-?\d+(?:\.\d+)?\b/.test(normalizedText)) continue;
+    if (isDifferentMarkerLine(text, "")) continue;
+
+    const hasExpectedUnit = expectedUnits.length === 0
+      || expectedUnits.some(unit => new RegExp(`\\b${escapeRegExp(unit).replace(/\\ /g, "\\s*")}\\b`, "i").test(normalizedText));
+    if (hasExpectedUnit) return text;
+  }
+
+  return null;
+}
+
 function extractExplicitFlag(tail) {
   const flagPattern = /(?:^|[\s|,;:(])(?:flag|status)?\s*:?\s*(critical|crit|panic|hh|ll|high|low|h|l)(?=$|[\s|,;:)])/gi;
   let flagMatch;
 
   while ((flagMatch = flagPattern.exec(tail)) !== null) {
     const afterFlag = tail.slice(flagMatch.index + flagMatch[0].length);
+    if (/^\s*sensitive\b/i.test(afterFlag)) {
+      continue;
+    }
+
     if (/^\s*:?\s*(?:<=|>=|<|>|=|\d|less than|more than|above|upto|up to)/i.test(afterFlag)) {
       continue;
     }
@@ -897,6 +1010,7 @@ const UNIT_ALIASES = {
   "mm/hr": ["mm/hr", "mm/hour"],
   "mg/L": ["mg/l"],
   "mg/dL": ["mg/dl"],
+  "ng/L": ["ng/l"],
   "%": ["%"],
   "mIU/L": ["miu/l", "uiu/ml", "µiu/ml", "μiu/ml"],
   "ng/dL": ["ng/dl"],
@@ -966,6 +1080,45 @@ function extractUnitAfterValue(tail, candidate, marker) {
   };
 }
 
+function extractUnitBeforeValue(tail, candidate, marker) {
+  const beforeValue = normalizeUnitText(tail.slice(0, candidate.start));
+  const expectedUnits = getExpectedUnits(marker);
+
+  for (const expected of expectedUnits) {
+    const unitPattern = new RegExp(`(?:^|[\\s|,;:)])${escapeRegExp(expected).replace(/\\ /g, "\\s*")}(?=$|[\\s|,;:)\\-])`, "i");
+    if (unitPattern.test(beforeValue)) {
+      return {
+        unit: marker.unit,
+        rawUnit: expected,
+        valid: true,
+      };
+    }
+  }
+
+  return {
+    unit: "",
+    rawUnit: "",
+    valid: false,
+  };
+}
+
+function parseUnitRangeBeforeValue(tail, candidate, marker) {
+  const beforeValue = tail.slice(0, candidate.start).trim();
+  const expectedUnits = getExpectedUnits(marker);
+  const rangePattern = "((?:<=|>=|<|>|less than|more than|above|upto|up to)?\\s*-?\\d+(?:\\.\\d+)?(?:\\s*(?:-|to|\\u2013|\\u2014|Ã¢â‚¬â€œ|Ã¢â‚¬â€)\\s*-?\\d+(?:\\.\\d+)?)?)\\s*$";
+
+  for (const expected of expectedUnits) {
+    const pattern = new RegExp(`${escapeRegExp(expected).replace(/\\ /g, "\\s*")}\\s+${rangePattern}`, "i");
+    const match = normalizeUnitText(beforeValue).match(pattern);
+    if (!match) continue;
+
+    const reportRange = parseReferenceImmediatelyAfterValue(match[1]);
+    if (reportRange) return reportRange;
+  }
+
+  return null;
+}
+
 function hasInvalidRawUnit(unit) {
   return Boolean(unit.rawUnit && !unit.valid);
 }
@@ -979,6 +1132,32 @@ function getHbA1cReferenceRange() {
     min: 0,
     max: 5.6,
     text: HBA1C_REFERENCE_RANGE_TEXT,
+  };
+}
+
+function getMarkerDefaultRange(marker) {
+  if (typeof marker.min !== "number" && typeof marker.max !== "number") return null;
+
+  if (typeof marker.min === "number" && typeof marker.max === "number") {
+    return {
+      min: marker.min,
+      max: marker.max,
+      text: `${marker.min}-${marker.max}`,
+    };
+  }
+
+  if (typeof marker.max === "number") {
+    return {
+      min: null,
+      max: marker.max,
+      text: `< ${marker.max}`,
+    };
+  }
+
+  return {
+    min: marker.min,
+    max: null,
+    text: `> ${marker.min}`,
   };
 }
 
@@ -1078,12 +1257,39 @@ function extractNumberAfterAlias(matchObj, alias, marker, lines) {
   const match = line.match(pattern);
   if (!match) return null;
 
-  const tail = line.slice((match.index || 0) + match[0].length);
-  const ranges = getReferenceRangeMatches(tail);
+  let tail = line.slice((match.index || 0) + match[0].length);
+  const nearbyResultTail = !startsWithResultValue(tail)
+    ? findNearbyStandaloneResultTail(lines, index, marker)
+    : null;
+  if (nearbyResultTail) {
+    tail = nearbyResultTail;
+  }
+
+  const unitPrefixedRange = getUnitPrefixedReferenceRange(tail);
+  let ranges = [
+    ...getReferenceRangeMatches(tail),
+    ...(unitPrefixedRange ? [unitPrefixedRange] : []),
+  ];
   let reportRange = isHbA1c
     ? getHbA1cReferenceRange()
-    : (parseCategoricalReferenceFromTail(tail) || parseReferenceFromTail(tail));
-  const candidates = getResultCandidates(tail, ranges);
+    : (unitPrefixedRange || parseCategoricalReferenceFromTail(tail) || parseReferenceFromTail(tail));
+  let candidates = getResultCandidates(tail, ranges);
+
+  if (candidates.length === 0 && !nearbyResultTail) {
+    const fallbackTail = findNearbyStandaloneResultTail(lines, index, marker);
+    if (fallbackTail) {
+      tail = fallbackTail;
+      const fallbackUnitPrefixedRange = getUnitPrefixedReferenceRange(tail);
+      ranges = [
+        ...getReferenceRangeMatches(tail),
+        ...(fallbackUnitPrefixedRange ? [fallbackUnitPrefixedRange] : []),
+      ];
+      reportRange = isHbA1c
+        ? getHbA1cReferenceRange()
+        : (fallbackUnitPrefixedRange || parseCategoricalReferenceFromTail(tail) || parseReferenceFromTail(tail));
+      candidates = getResultCandidates(tail, ranges);
+    }
+  }
 
   if (candidates.length === 0) {
     return {
@@ -1096,11 +1302,24 @@ function extractNumberAfterAlias(matchObj, alias, marker, lines) {
     };
   }
 
-  const result = candidates[0];
-  if (!reportRange && !isHbA1c) {
-    reportRange = parseReferenceImmediatelyAfterValue(tail.slice(result.end));
+  const result = getTrailingResultCandidate(tail, ranges) || candidates[0];
+  let unit = extractUnitAfterValue(tail, result, marker);
+  if (!unit.valid) {
+    const leadingUnit = extractUnitBeforeValue(tail, result, marker);
+    if (leadingUnit.valid) unit = leadingUnit;
   }
-  const unit = extractUnitAfterValue(tail, result, marker);
+  if (!reportRange && !isHbA1c) {
+    const afterResult = tail.slice(result.end).trim();
+    const afterUnit = unit.rawUnit && afterResult.toLowerCase().startsWith(unit.rawUnit.toLowerCase())
+      ? afterResult.slice(unit.rawUnit.length).trim()
+      : afterResult;
+    reportRange = parseReferenceImmediatelyAfterValue(afterUnit)
+      || parseUnitRangeBeforeValue(tail, result, marker)
+      || getUnitPrefixedReferenceRange(tail.slice(0, result.start));
+  }
+  if (!reportRange && !isHbA1c && unit.valid) {
+    reportRange = getMarkerDefaultRange(marker);
+  }
   if (isHbA1c && (!isHbA1cStructuredResultTail(tail, result) || !unit.valid || unit.unit !== "%" || result.value < 2 || result.value > 20)) {
     return {
       prefix: result.prefix,
@@ -1605,6 +1824,53 @@ export function buildAnalysis(vitals, rawText) {
   };
 }
 
+async function ocrImageSource(source, sourcePage = 1) {
+  if (typeof window === "undefined") return "";
+
+  try {
+    const { recognize } = await import("tesseract.js");
+    const result = await recognize(source, "eng");
+    const text = result?.data?.text?.trim();
+    return text ? `[[PAGE:${sourcePage}]]\n${text}` : "";
+  } catch (ocrError) {
+    console.warn("OCR extraction failed:", ocrError);
+    return "";
+  }
+}
+
+async function ocrImageFile(file) {
+  const imageUrl = URL.createObjectURL(file);
+  try {
+    return await ocrImageSource(imageUrl, 1);
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+}
+
+async function ocrPdfPages(pdf) {
+  if (typeof document === "undefined") return "";
+
+  const pageTexts = [];
+  const pageLimit = Math.min(pdf.numPages, MAX_OCR_PDF_PAGES);
+
+  for (let pageNum = 1; pageNum <= pageLimit; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) continue;
+
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    await page.render({ canvasContext: context, viewport }).promise;
+
+    const pageText = await ocrImageSource(canvas, pageNum);
+    if (pageText) pageTexts.push(pageText);
+  }
+
+  return pageTexts.join("\n").trim();
+}
+
 export async function extractTextFromFile(file) {
   if (!file) return "";
 
@@ -1618,7 +1884,7 @@ export async function extractTextFromFile(file) {
   }
 
   if (["png", "jpg", "jpeg", "webp", "heic"].includes(extension) || file.type.startsWith("image/")) {
-    return "";
+    return ocrImageFile(file);
   }
 
   if (file.type === "application/pdf" || extension === "pdf") {
@@ -1640,11 +1906,12 @@ export async function extractTextFromFile(file) {
         // Group text items by their Y position to reconstruct lines
         const lineMap = new Map();
         for (const item of content.items) {
-          if (!item.str || !item.str.trim()) continue;
+          const itemText = normalizePrivateUsePdfText(item.str);
+          if (!itemText || !itemText.trim()) continue;
           // Round Y to nearest integer to group items on the same line
           const y = Math.round(item.transform[5]);
           if (!lineMap.has(y)) lineMap.set(y, []);
-          lineMap.get(y).push({ x: item.transform[4], text: item.str });
+          lineMap.get(y).push({ x: item.transform[4], text: itemText });
         }
 
         // Sort lines by Y (descending since PDF Y goes bottom-up) then items by X
@@ -1659,6 +1926,9 @@ export async function extractTextFromFile(file) {
 
       const fullText = pageTexts.join("\n").trim();
       if (fullText) return fullText;
+
+      const ocrText = await ocrPdfPages(pdf);
+      if (ocrText) return ocrText;
     } catch (pdfJsError) {
       console.warn("pdf.js extraction failed, falling back to regex parser:", pdfJsError);
     }

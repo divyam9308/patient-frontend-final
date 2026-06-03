@@ -104,4 +104,88 @@ describe("analyzeLabReport range extraction", () => {
       valid: true,
     });
   });
+
+  test("normalizes private-use PDF glyph text before parsing", () => {
+    const report = [
+      "\uF048\uF065\uF06D\uF06F\uF067\uF06C\uF06F\uF062\uF069\uF06E",
+      "\uF031\uF033\uF02E\uF035",
+      "\uF031\uF032\uF02E\uF030 \uF02D \uF031\uF036\uF02E\uF030 \uF067\uF02F\uF064\uF04C",
+    ].join("\n");
+
+    const hemoglobin = analyzeLabReport(report).vitals.find(vital => vital.name === "Hemoglobin");
+
+    expect(hemoglobin).toMatchObject({
+      value: "13.5",
+      range: "12.0-16.0",
+      status: "normal",
+      valid: true,
+    });
+  });
+
+  test("reads table rows where result appears immediately above the marker", () => {
+    const report = [
+      "Test Name Results Units Bio. Ref. Interval",
+      "46.00 mg/dL 46 - 174",
+      "APOLIPOPROTEIN B (Apo B)",
+      "(Immunoturbidimetry)",
+      "1.00 mg/L <1.00",
+      "CARDIO C-REACTIVE PROTEIN (hsCRP), SERUM",
+    ].join("\n");
+
+    const result = analyzeLabReport(report);
+    const apoB = result.vitals.find(vital => vital.name === "Apolipoprotein B");
+    const crp = result.vitals.find(vital => vital.name === "CRP");
+
+    expect(apoB).toMatchObject({
+      value: "46.00",
+      range: "46-174 mg/dL",
+      status: "normal",
+      valid: true,
+    });
+    expect(crp).toMatchObject({
+      value: "1.00",
+      range: "< 1.00 mg/L",
+      status: "normal",
+      valid: true,
+    });
+  });
+
+  test("reads PDF-extracted rows where units and reference range appear before result", () => {
+    const report = [
+      "Test Name Results Units Bio. Ref. Interval",
+      "APOLIPOPROTEIN B (Apo B)",
+      "(Immunoturbidimetry)",
+      "mg/dL 46 - 174 46.00",
+      "CARDIO C-REACTIVE PROTEIN (hsCRP), SERUM",
+      "(Immunoturbidimetry)",
+      "mg/L <1.00 1.00",
+      "TROPONIN- I, SERUM HIGH SENSITIVE",
+      "(CMIA)",
+      "ng/L 4",
+    ].join("\n");
+
+    const result = analyzeLabReport(report);
+    const apoB = result.vitals.find(vital => vital.name === "Apolipoprotein B");
+    const crp = result.vitals.find(vital => vital.name === "CRP");
+    const troponin = result.vitals.find(vital => vital.name === "Troponin I");
+
+    expect(apoB).toMatchObject({
+      value: "46.00",
+      range: "46-174 mg/dL",
+      status: "normal",
+      valid: true,
+    });
+    expect(crp).toMatchObject({
+      value: "1.00",
+      range: "< 1.00 mg/L",
+      status: "normal",
+      valid: true,
+    });
+    expect(troponin).toMatchObject({
+      value: "4",
+      unit: "ng/L",
+      status: "normal",
+      valid: true,
+    });
+  });
 });
