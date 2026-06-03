@@ -544,6 +544,17 @@ const STOP_WORDS = new Set(["age", "date", "page", "id", "pin", "phone"]);
 const MAX_ANALYSIS_TEXT_LENGTH = 200000;
 const MAX_PDF_PARSE_BYTES = 10485760; // 10MB
 const HBA1C_REFERENCE_RANGE_TEXT = "Diabetes >6.5%, Prediabetes 5.7-6.4%, Normal <5.7%";
+const CATEGORICAL_RANGE_LABELS = [
+  "near to above optimal",
+  "borderline high",
+  "very high",
+  "desirable",
+  "optimal",
+  "normal",
+  "borderline",
+  "high",
+  "low"
+];
 
 function normalizeText(text) {
   return String(text || "")
@@ -699,8 +710,87 @@ function parseReferenceFromTail(tail) {
   return null;
 }
 
+function parseCategoricalReferenceFromTail(tail) {
+  const normalizedTail = String(tail || "").replace(/\s+/g, " ").trim();
+  if (!normalizedTail) return null;
+
+  const escapedLabels = CATEGORICAL_RANGE_LABELS.map(escapeRegExp).join("|");
+  const rangeValuePattern = "(?:<=|>=|<|>|=)?\\s*\\d+(?:\\.\\d+)?(?:\\s*(?:-|to|\\u2013|\\u2014|â€“|â€”|-)\\s*\\d+(?:\\.\\d+)?)?";
+  const categoryPattern = new RegExp(`\\b(${escapedLabels})\\s*:?\\s*(${rangeValuePattern})`, "gi");
+  const parts = [];
+  let inferredMax = null;
+  let match;
+
+  while ((match = categoryPattern.exec(normalizedTail)) !== null && parts.length < 8) {
+    const rawLabel = match[1].toLowerCase();
+    const rawValue = match[2].trim();
+    const label = rawLabel.replace(/\b\w/g, char => char.toUpperCase());
+    const value = rawValue.replace(/\s+/g, "");
+    const upperMatch = rawValue.match(/^<\s*=?\s*(\d+(?:\.\d+)?)/);
+    if (upperMatch && ["desirable", "optimal", "normal"].includes(rawLabel) && inferredMax === null) {
+      inferredMax = Number(upperMatch[1]);
+    }
+    parts.push(`${label}: ${value}`);
+  }
+
+  const upToPattern = /\b(up to|upto)\s*:?\s*(\d+(?:\.\d+)?)/gi;
+  while ((match = upToPattern.exec(normalizedTail)) !== null && parts.length < 8) {
+    parts.push(`Up to: ${match[2]}`);
+  }
+
+  if (!parts.length) return null;
+
+  return {
+    min: null,
+    max: inferredMax,
+    text: [...new Set(parts)].join("; "),
+  };
+}
+
+function parseReferenceImmediatelyAfterValue(tail) {
+  const normalizedTail = String(tail || "").replace(/\s+/g, " ").trim();
+  if (!normalizedTail) return null;
+
+  const directRangeMatch = normalizedTail.match(/^(-?\d+(?:\.\d+)?)\s*(?:-|to|\u2013|\u2014|â€“|â€”)\s*(-?\d+(?:\.\d+)?)/i);
+  if (directRangeMatch) {
+    const min = Number(directRangeMatch[1]);
+    const max = Number(directRangeMatch[2]);
+    if (min <= max) {
+      return {
+        min,
+        max,
+        text: `${directRangeMatch[1]}-${directRangeMatch[2]}`,
+      };
+    }
+  }
+
+  const directUpperMatch = normalizedTail.match(/^(?:<|<=|less than|upto|up to)\s*(-?\d+(?:\.\d+)?)/i);
+  if (directUpperMatch) {
+    return {
+      min: null,
+      max: Number(directUpperMatch[1]),
+      text: `< ${directUpperMatch[1]}`,
+    };
+  }
+
+  const directLowerMatch = normalizedTail.match(/^(?:>|>=|more than|above)\s*(-?\d+(?:\.\d+)?)/i);
+  if (directLowerMatch) {
+    return {
+      min: Number(directLowerMatch[1]),
+      max: null,
+      text: `> ${directLowerMatch[1]}`,
+    };
+  }
+
+  return parseCategoricalReferenceFromTail(normalizedTail) || parseReferenceFromTail(normalizedTail);
+}
+
 function isInsideRanges(index, ranges) {
   return ranges.some(range => index >= range.start && index < range.end);
+}
+
+function startsWithReferenceRangeText(text) {
+  return Boolean(parseReferenceImmediatelyAfterValue(text));
 }
 
 function isDescriptorNumber(tail, numberMatch) {
@@ -742,13 +832,21 @@ function getResultCandidates(tail, ranges) {
 }
 
 function extractExplicitFlag(tail) {
-  const flagMatch = tail.match(/(?:^|[\s|,;:(])(?:flag|status)?\s*:?\s*(critical|crit|panic|hh|ll|high|low|h|l)(?=$|[\s|,;:)])/i);
-  if (!flagMatch) return null;
+  const flagPattern = /(?:^|[\s|,;:(])(?:flag|status)?\s*:?\s*(critical|crit|panic|hh|ll|high|low|h|l)(?=$|[\s|,;:)])/gi;
+  let flagMatch;
 
-  const flag = flagMatch[1].toLowerCase();
-  if (["critical", "crit", "panic", "hh", "ll"].includes(flag)) return "critical";
-  if (["h", "high"].includes(flag)) return "high";
-  if (["l", "low"].includes(flag)) return "low";
+  while ((flagMatch = flagPattern.exec(tail)) !== null) {
+    const afterFlag = tail.slice(flagMatch.index + flagMatch[0].length);
+    if (/^\s*:?\s*(?:<=|>=|<|>|=|\d|less than|more than|above|upto|up to)/i.test(afterFlag)) {
+      continue;
+    }
+
+    const flag = flagMatch[1].toLowerCase();
+    if (["critical", "crit", "panic", "hh", "ll"].includes(flag)) return "critical";
+    if (["h", "high"].includes(flag)) return "high";
+    if (["l", "low"].includes(flag)) return "low";
+  }
+
   return null;
 }
 
@@ -793,6 +891,14 @@ function extractUnitAfterValue(tail, candidate, marker) {
   const expectedUnits = getExpectedUnits(marker);
 
   if (/^(?:reference|normal|range|ref|interval|bio\.?\s*ref\.?)(?=$|[\s:])/i.test(afterValue)) {
+    return {
+      unit: "",
+      rawUnit: "",
+      valid: false,
+    };
+  }
+
+  if (startsWithReferenceRangeText(afterValue)) {
     return {
       unit: "",
       rawUnit: "",
@@ -886,7 +992,7 @@ function extractNumberAfterAlias(matchObj, alias, marker, lines) {
   }
 
   if (!isHbA1c && lines && typeof index === "number") {
-    for (let i = 1; i <= 3; i++) {
+    for (let i = 1; i <= 5; i++) {
       if (lines[index + i]) {
         const nextLine = typeof lines[index + i] === "string" ? lines[index + i] : lines[index + i].text;
         if (isDifferentMarkerLine(nextLine, alias)) break;
@@ -905,7 +1011,9 @@ function extractNumberAfterAlias(matchObj, alias, marker, lines) {
 
   const tail = line.slice((match.index || 0) + match[0].length);
   const ranges = getReferenceRangeMatches(tail);
-  const reportRange = isHbA1c ? getHbA1cReferenceRange() : parseReferenceFromTail(tail);
+  let reportRange = isHbA1c
+    ? getHbA1cReferenceRange()
+    : (parseCategoricalReferenceFromTail(tail) || parseReferenceFromTail(tail));
   const candidates = getResultCandidates(tail, ranges);
 
   if (candidates.length === 0) {
@@ -920,6 +1028,9 @@ function extractNumberAfterAlias(matchObj, alias, marker, lines) {
   }
 
   const result = candidates[0];
+  if (!reportRange && !isHbA1c) {
+    reportRange = parseReferenceImmediatelyAfterValue(tail.slice(result.end));
+  }
   const unit = extractUnitAfterValue(tail, result, marker);
   if (isHbA1c && (!isHbA1cStructuredResultTail(tail, result) || !unit.valid || unit.unit !== "%" || result.value < 2 || result.value > 20)) {
     return {
