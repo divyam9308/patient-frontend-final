@@ -1343,7 +1343,7 @@ export async function extractTextFromFile(file) {
       candidates.push(match.replace(/^\(/, "").replace(/\)\s*Tj$/, ""));
     });
 
-    const arrayMatches = binary.match(/\[(.*?)\]\s*TJ/gs) || [];
+    const arrayMatches = binary.match(/\[([^\]]+)\]\s*TJ/g) || [];
     arrayMatches.forEach(match => {
       const pieces = [...match.matchAll(/\(([^()]*)\)/g)].map(piece => piece[1]);
       if (pieces.length) candidates.push(pieces.join(""));
