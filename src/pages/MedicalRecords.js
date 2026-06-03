@@ -601,11 +601,11 @@ export default function MedicalRecords() {
                   {false && parsedVitalsPreview.length > 0 && (
                     <div className="mr-ai-preview-card">
                       <div className="mr-ai-preview-title">
-                        {abnormalPreview.length > 0 ? `⚠️ ${abnormalPreview.length} Abnormal Level${abnormalPreview.length === 1 ? '' : 's'} Detected` : '✅ All Detected Levels Normal'}
+                        {validPreview.length > 0 ? `⚠️ ${validPreview.length} Abnormal Level${validPreview.length === 1 ? '' : 's'} Detected` : '✅ All Detected Levels Normal'}
                       </div>
-                      {abnormalPreview.length > 0 ? (
+                      {validPreview.length > 0 ? (
                         <div className="mr-abnormal-list">
-                          {abnormalPreview.map((vital, index) => (
+                          {validPreview.map((vital, index) => (
                             <div key={`${vital.name}-${index}`} className="mr-abnormal-item-v2">
                               <div className="mr-abnormal-item-header">
                                 <strong className="mr-abnormal-name">{vital.name}</strong>
