@@ -829,6 +829,119 @@
   transition: width 1s ease;
 }
 
+/* ===================== EMERGENCY ALERTS TAB ===================== */
+.db-empty-state {
+  padding: 32px 18px;
+  color: var(--text-muted);
+  font-size: 14px;
+  text-align: center;
+}
+
+.db-alert-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  border-radius: 10px;
+  padding: 11px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+.db-alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.db-alert-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid #fecaca;
+  border-left: 4px solid #dc2626;
+  border-radius: 12px;
+  background: #fff8f8;
+}
+
+.db-alert-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.db-alert-topline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.db-alert-pill {
+  background: #dc2626;
+  color: #fff;
+  border-radius: 50px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.db-alert-time {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.db-alert-symptoms {
+  color: var(--text-dark);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.45;
+  margin-bottom: 8px;
+}
+
+.db-alert-meta {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.db-alert-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 120px;
+}
+
+.db-alert-accept,
+.db-alert-decline {
+  border: none;
+  border-radius: 50px;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 9px 16px;
+}
+
+.db-alert-accept {
+  background: #2d6a3f;
+  color: #fff;
+}
+
+.db-alert-decline {
+  background: #fff;
+  border: 1.5px solid #fecaca;
+  color: #dc2626;
+}
+
+.db-alert-accept:disabled,
+.db-alert-decline:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* ===================== RESPONSIVE ===================== */
 @media (max-width: 900px) {
   .db-sidebar { display: none; }
@@ -836,4 +949,6 @@
   .db-stats-row { grid-template-columns: 1fr 1fr; }
   .db-two-col, .db-three-col { grid-template-columns: 1fr; }
   .db-info-grid { grid-template-columns: 1fr; }
+  .db-alert-item { flex-direction: column; }
+  .db-alert-actions { flex-direction: row; }
 }

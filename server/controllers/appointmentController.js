@@ -1,5 +1,33 @@
 import supabase from '../config/supabaseClient.js';
 
+const APPOINTMENT_TYPE_MARKER = /\[appointment_type:(follow_up|regular|priority|emergency)\]/;
+const TRIAGE_ID_MARKER = /\[triage_id:([0-9a-f-]+)\]/i;
+
+function isMissingSchemaColumn(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('appointment_type') || message.includes('triage_id');
+}
+
+function packReason(reason, appointmentType, triageId) {
+  const markers = [`[appointment_type:${appointmentType}]`];
+  if (triageId) markers.push(`[triage_id:${triageId}]`);
+  return [markers.join(''), reason].filter(Boolean).join('\n');
+}
+
+function unpackReason(reason) {
+  const text = reason || '';
+  const typeMatch = text.match(APPOINTMENT_TYPE_MARKER);
+  const triageMatch = text.match(TRIAGE_ID_MARKER);
+  return {
+    appointmentType: typeMatch?.[1],
+    triageId: triageMatch?.[1],
+    cleanReason: text
+      .replace(APPOINTMENT_TYPE_MARKER, '')
+      .replace(TRIAGE_ID_MARKER, '')
+      .trim(),
+  };
+}
+
 // ─────────────────────────────────────────────────────────
 // GET /api/cities
 // ─────────────────────────────────────────────────────────
@@ -116,7 +144,8 @@ export const getDoctors = async (req, res) => {
         doctors!inner (
           name,
           qualification,
-          department_id
+          department_id,
+          departments(name)
         ),
         hospitals!inner (
           name,
@@ -132,6 +161,7 @@ export const getDoctors = async (req, res) => {
       doctor_hospital_id: d.id,
       name: d.doctors.name,
       qualification: d.doctors.qualification,
+      department_name: d.doctors.departments?.name,
       room_number: d.room_number,
       consultation_fee: d.consultation_fee,
       hospital_name: d.hospitals.name,
@@ -170,14 +200,16 @@ export const getDoctorSchedules = async (req, res) => {
 export const getAppointments = async (req, res) => {
   try {
     const patientId = req.user.id;
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('appointments')
       .select(`
         id,
         appointment_date,
         appointment_time,
         status,
+        reason,
         appointment_type,
+        triage_id,
         doctor_hospitals (
           doctors (name, departments(name)),
           hospitals (name, cities(name))
@@ -187,29 +219,110 @@ export const getAppointments = async (req, res) => {
       .order('appointment_date', { ascending: true })
       .order('appointment_time', { ascending: true });
 
+    if (error && isMissingSchemaColumn(error)) {
+      const fallback = await supabase
+        .from('appointments')
+        .select(`
+          id,
+          appointment_date,
+          appointment_time,
+          status,
+          reason,
+          is_emergency,
+          doctor_hospitals (
+            doctors (name, departments(name)),
+            hospitals (name, cities(name))
+          )
+        `)
+        .eq('patient_id', patientId)
+        .order('appointment_date', { ascending: true })
+        .order('appointment_time', { ascending: true });
+
+      data = fallback.data;
+      error = fallback.error;
+    }
+
     if (error) throw error;
 
     const formatted = data.map(a => {
       const docHosp = a.doctor_hospitals;
       const dateObj = new Date(`${a.appointment_date}T${a.appointment_time}`);
-      
+      const reasonMeta = unpackReason(a.reason);
+
       return {
         id: a.id,
         doc: docHosp?.doctors?.name,
         dept: docHosp?.doctors?.departments?.name,
         city: docHosp?.hospitals?.cities?.name,
         hospital: docHosp?.hospitals?.name,
-        appointment_type: a.appointment_type,
+        appointment_type: a.appointment_type || reasonMeta.appointmentType || (a.is_emergency ? 'emergency' : 'follow_up'),
         day: dateObj.getDate().toString().padStart(2, '0'),
         mon: dateObj.toLocaleString('en-US', { month: 'short' }).toUpperCase(),
         time: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
-        status: a.status,
+        status: a.status === 'pending' ? 'upcoming' : (a.status || 'upcoming'),
         appointment_date: a.appointment_date,
         appointment_time: a.appointment_time,
+        triage_id: a.triage_id || reasonMeta.triageId,
+        reason: reasonMeta.cleanReason,
       };
     });
 
-    res.json(formatted);
+    const { data: emergencyData } = await supabase
+      .from('emergency_requests')
+      .select(`
+        id,
+        status,
+        created_at,
+        requested_arrival_time,
+        hospitals (name, cities(name)),
+        departments (name)
+      `)
+      .eq('patient_id', patientId);
+
+    const formattedEmergencies = (emergencyData || []).map(e => {
+      const dateObj = new Date(e.requested_arrival_time || e.created_at);
+
+      const tz = 'Asia/Kolkata';
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit',
+        hourCycle: 'h23' // ensures 00-23 format
+      }).formatToParts(dateObj);
+
+      const p = {};
+      parts.forEach(part => p[part.type] = part.value);
+
+      const apptDate = `${p.year}-${p.month}-${p.day}`;
+      const apptTime = `${p.hour}:${p.minute}`;
+
+      const mon = new Intl.DateTimeFormat('en-US', { timeZone: tz, month: 'short' }).format(dateObj).toUpperCase();
+      const time = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: true }).format(dateObj);
+
+      return {
+        id: e.id,
+        doc: 'Emergency / Ambulance',
+        dept: e.departments?.name || 'Emergency',
+        city: e.hospitals?.cities?.name,
+        hospital: e.hospitals?.name,
+        appointment_type: 'emergency',
+        day: p.day,
+        mon: mon,
+        time: time,
+        status: ['open', 'accepted'].includes(e.status) ? 'upcoming' : (e.status === 'expired' ? 'cancelled' : e.status),
+        appointment_date: apptDate,
+        appointment_time: apptTime,
+        reason: 'Emergency request (booked via triage)',
+      };
+    });
+
+    const allAppointments = [...formatted, ...formattedEmergencies].sort((a, b) => {
+      const dateA = new Date(`${a.appointment_date}T${a.appointment_time}`);
+      const dateB = new Date(`${b.appointment_date}T${b.appointment_time}`);
+      return dateA - dateB;
+    });
+
+    res.json(allAppointments);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -221,41 +334,28 @@ export const getAppointments = async (req, res) => {
 export const createAppointment = async (req, res) => {
   try {
     const patientId = req.user.id;
-    const { doctor_hospital_id, appointment_date, appointment_time, reason, appointment_type, triage_id } = req.body;
+    const { doctor_hospital_id, appointment_date, appointment_time, reason, appointment_type = 'follow_up', triage_id } = req.body;
 
     if (!doctor_hospital_id || !appointment_date || !appointment_time || !appointment_type) {
       return res.status(400).json({ error: 'doctor_hospital_id, appointment_date, appointment_time, and appointment_type are required' });
     }
 
-    if (appointment_type === 'emergency') {
-      return res.status(400).json({ error: 'Emergency appointments cannot be booked through this endpoint. Use /api/emergency-requests instead.' });
+    if (!['follow_up', 'regular', 'priority'].includes(appointment_type)) {
+      return res.status(400).json({ error: 'Emergency appointments must use /api/emergency-requests instead of normal slot booking' });
     }
 
     if ((appointment_type === 'regular' || appointment_type === 'priority') && !triage_id) {
-      return res.status(400).json({ error: 'triage_id is required for regular and priority appointments.' });
+      return res.status(400).json({ error: 'triage_id is required for regular and priority appointments' });
     }
 
     const appointmentTime = new Date(`${appointment_date}T${appointment_time}`);
-    
     if (appointmentTime <= new Date()) {
       return res.status(400).json({
         error: 'Cannot book an appointment in the past. Please choose a future date and time.',
       });
     }
 
-    if (appointment_type === 'follow_up') {
-      const sevenDaysFromNow = new Date();
-      sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
-      
-      // Zero out time for just date comparison if desired, but fine as is
-      if (appointmentTime < sevenDaysFromNow) {
-        return res.status(400).json({
-          error: 'Follow-up appointments must be scheduled at least 7 days in advance.',
-        });
-      }
-    }
-
-    const { data: newAppt, error } = await supabase
+    let { data: newAppt, error } = await supabase
       .from('appointments')
       .insert({
         patient_id: patientId,
@@ -264,17 +364,42 @@ export const createAppointment = async (req, res) => {
         appointment_time,
         reason,
         appointment_type,
-        triage_id,
+        triage_id: triage_id || null,
         status: 'upcoming'
       })
       .select(`
-        id, appointment_date, appointment_time, status, appointment_type,
+        id, appointment_date, appointment_time, status, appointment_type, triage_id,
         doctor_hospitals (
           doctors (name, departments(name)),
           hospitals (name, cities(name))
         )
       `)
       .single();
+
+    if (error && isMissingSchemaColumn(error)) {
+      const fallback = await supabase
+        .from('appointments')
+        .insert({
+          patient_id: patientId,
+          doctor_hospital_id,
+          appointment_date,
+          appointment_time,
+          reason: packReason(reason, appointment_type, triage_id),
+          is_emergency: false,
+          status: 'upcoming'
+        })
+        .select(`
+          id, appointment_date, appointment_time, status, reason, is_emergency,
+          doctor_hospitals (
+            doctors (name, departments(name)),
+            hospitals (name, cities(name))
+          )
+        `)
+        .single();
+
+      newAppt = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) {
       if (error.code === '23505') { // Postgres Unique Violation
@@ -285,6 +410,7 @@ export const createAppointment = async (req, res) => {
 
     const docHosp = newAppt.doctor_hospitals;
     const dateObj = new Date(`${newAppt.appointment_date}T${newAppt.appointment_time}`);
+    const reasonMeta = unpackReason(newAppt.reason);
 
     res.status(201).json({
       id: newAppt.id,
@@ -292,11 +418,15 @@ export const createAppointment = async (req, res) => {
       dept: docHosp?.doctors?.departments?.name,
       city: docHosp?.hospitals?.cities?.name,
       hospital: docHosp?.hospitals?.name,
-      appointment_type: newAppt.appointment_type,
+      appointment_type: newAppt.appointment_type || reasonMeta.appointmentType || appointment_type,
       day: dateObj.getDate().toString().padStart(2, '0'),
       mon: dateObj.toLocaleString('en-US', { month: 'short' }).toUpperCase(),
       time: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
       status: newAppt.status,
+      appointment_date: newAppt.appointment_date,
+      appointment_time: newAppt.appointment_time,
+      triage_id: newAppt.triage_id || reasonMeta.triageId || triage_id,
+      reason: reasonMeta.cleanReason || reason || null,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -309,17 +439,36 @@ export const createAppointment = async (req, res) => {
 export const updateAppointment = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body; // Can only update status for now (e.g. cancelled)
+    const { status } = req.body; // Can only update status for now (e.g. cancelled, completed, missed)
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('appointments')
       .update({ status })
       .eq('id', id)
       .eq('patient_id', req.user.id)
       .select()
-      .single();
+      .maybeSingle();
 
-    if (error) throw error;
+    if (!data) {
+      // Fallback: try emergency_requests
+      const { data: eData, error: eError } = await supabase
+        .from('emergency_requests')
+        .update({ status })
+        .eq('id', id)
+        .eq('patient_id', req.user.id)
+        .select()
+        .maybeSingle();
+
+      if (eError) throw eError;
+      data = eData;
+    } else if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      return res.status(404).json({ error: 'Appointment not found or not owned by user' });
+    }
+
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -332,13 +481,21 @@ export const updateAppointment = async (req, res) => {
 export const deleteAppointment = async (req, res) => {
   try {
     const { id } = req.params;
-    const { error } = await supabase
+
+    // Attempt delete on appointments
+    await supabase
       .from('appointments')
       .delete()
       .eq('id', id)
       .eq('patient_id', req.user.id);
 
-    if (error) throw error;
+    // Attempt delete on emergency_requests
+    await supabase
+      .from('emergency_requests')
+      .update({ status: 'cancelled' }) // Safer to cancel emergencies rather than hard delete
+      .eq('id', id)
+      .eq('patient_id', req.user.id);
+
     res.status(204).send();
   } catch (error) {
     res.status(500).json({ error: error.message });

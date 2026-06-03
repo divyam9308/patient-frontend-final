@@ -1,0 +1,40 @@
+doctor_key,doctor_name,hospital_name,department_name,day_of_week,start_time,end_time,shift_label,max_slots,slot_minutes,data_status
+aiims-ramesh-general,Dr. Ramesh Kumar,AIIMS New Delhi,General Medicine,Monday,09:00:00,13:00:00,Morning OPD,16,30,sample_demo
+aiims-ramesh-general,Dr. Ramesh Kumar,AIIMS New Delhi,General Medicine,Wednesday,16:00:00,19:00:00,Evening OPD,12,30,sample_demo
+aiims-sunita-general,Dr. Sunita Sharma,AIIMS New Delhi,General Medicine,Tuesday,09:00:00,13:00:00,Morning OPD,16,30,sample_demo
+aiims-sunita-general,Dr. Sunita Sharma,AIIMS New Delhi,General Medicine,Friday,16:00:00,19:00:00,Evening OPD,12,30,sample_demo
+safdarjung-amit-general,Dr. Amit Patel,Safdarjung Hospital,General Medicine,Monday,10:00:00,14:00:00,Morning OPD,16,30,sample_demo
+safdarjung-amit-general,Dr. Amit Patel,Safdarjung Hospital,General Medicine,Thursday,09:00:00,12:00:00,Morning OPD,12,30,sample_demo
+apollo-ramesh-general,Dr. Ramesh Kumar,Apollo Hospitals,General Medicine,Tuesday,10:00:00,13:00:00,Morning OPD,12,30,sample_demo
+apollo-ramesh-general,Dr. Ramesh Kumar,Apollo Hospitals,General Medicine,Saturday,09:00:00,12:00:00,Weekend OPD,12,30,sample_demo
+max-sunita-general,Dr. Sunita Sharma,Max Super Speciality Hospital,General Medicine,Wednesday,09:00:00,13:00:00,Morning OPD,16,30,sample_demo
+max-sunita-general,Dr. Sunita Sharma,Max Super Speciality Hospital,General Medicine,Friday,15:00:00,18:00:00,Evening OPD,12,30,sample_demo
+aiims-anil-cardio,Dr. Anil Gupta,AIIMS New Delhi,Cardiology,Monday,09:00:00,12:00:00,Morning OPD,12,30,sample_demo
+aiims-anil-cardio,Dr. Anil Gupta,AIIMS New Delhi,Cardiology,Thursday,16:00:00,19:00:00,Evening OPD,12,30,sample_demo
+safdarjung-neha-cardio,Dr. Neha Singh,Safdarjung Hospital,Cardiology,Tuesday,09:00:00,13:00:00,Morning OPD,16,30,sample_demo
+safdarjung-neha-cardio,Dr. Neha Singh,Safdarjung Hospital,Cardiology,Friday,10:00:00,13:00:00,Morning OPD,12,30,sample_demo
+fortis-meera-cardio,Dr. Meera Nair,Fortis Escorts Heart Institute,Cardiology,Monday,11:00:00,14:00:00,Morning OPD,12,30,sample_demo
+fortis-meera-cardio,Dr. Meera Nair,Fortis Escorts Heart Institute,Cardiology,Wednesday,16:00:00,19:00:00,Evening OPD,12,30,sample_demo
+max-anil-cardio,Dr. Anil Gupta,Max Super Speciality Hospital,Cardiology,Tuesday,15:00:00,18:00:00,Evening OPD,12,30,sample_demo
+apollo-meera-cardio,Dr. Meera Nair,Apollo Hospitals,Cardiology,Thursday,09:00:00,12:00:00,Morning OPD,12,30,sample_demo
+safdarjung-vikram-ortho,Dr. Vikram Malhotra,Safdarjung Hospital,Orthopedics,Monday,09:00:00,13:00:00,Morning OPD,16,30,sample_demo
+safdarjung-vikram-ortho,Dr. Vikram Malhotra,Safdarjung Hospital,Orthopedics,Saturday,09:00:00,12:00:00,Weekend OPD,12,30,sample_demo
+max-anjali-ortho,Dr. Anjali Desai,Max Super Speciality Hospital,Orthopedics,Tuesday,10:00:00,14:00:00,Morning OPD,16,30,sample_demo
+max-anjali-ortho,Dr. Anjali Desai,Max Super Speciality Hospital,Orthopedics,Thursday,16:00:00,19:00:00,Evening OPD,12,30,sample_demo
+apollo-rajesh-ortho,Dr. Rajesh Chawla,Apollo Hospitals,Orthopedics,Wednesday,09:00:00,13:00:00,Morning OPD,16,30,sample_demo
+aiims-anjali-ortho,Dr. Anjali Desai,AIIMS New Delhi,Orthopedics,Friday,09:00:00,12:00:00,Morning OPD,12,30,sample_demo
+safdarjung-rohit-peds,Dr. Rohit Verma,Safdarjung Hospital,Pediatrics,Monday,09:00:00,13:00:00,Morning OPD,16,30,sample_demo
+safdarjung-rohit-peds,Dr. Rohit Verma,Safdarjung Hospital,Pediatrics,Wednesday,16:00:00,19:00:00,Evening OPD,12,30,sample_demo
+max-priya-peds,Dr. Priya Mehta,Max Super Speciality Hospital,Pediatrics,Tuesday,09:00:00,13:00:00,Morning OPD,16,30,sample_demo
+apollo-swati-peds,Dr. Swati Jain,Apollo Hospitals,Pediatrics,Thursday,10:00:00,13:00:00,Morning OPD,12,30,sample_demo
+aiims-rohit-peds,Dr. Rohit Verma,AIIMS New Delhi,Pediatrics,Saturday,09:00:00,12:00:00,Weekend OPD,12,30,sample_demo
+safdarjung-sanjay-derm,Dr. Sanjay Joshi,Safdarjung Hospital,Dermatology,Monday,10:00:00,13:00:00,Morning OPD,12,30,sample_demo
+max-kavita-derm,Dr. Kavita Rao,Max Super Speciality Hospital,Dermatology,Wednesday,09:00:00,12:00:00,Morning OPD,12,30,sample_demo
+apollo-arjun-derm,Dr. Arjun Reddy,Apollo Hospitals,Dermatology,Friday,15:00:00,18:00:00,Evening OPD,12,30,sample_demo
+aiims-nisha-neuro,Dr. Nisha Bansal,AIIMS New Delhi,Neurology,Tuesday,09:00:00,13:00:00,Morning OPD,16,30,sample_demo
+aiims-nisha-neuro,Dr. Nisha Bansal,AIIMS New Delhi,Neurology,Friday,16:00:00,19:00:00,Evening OPD,12,30,sample_demo
+max-karan-neuro,Dr. Karan Mehra,Max Super Speciality Hospital,Neurology,Wednesday,10:00:00,14:00:00,Morning OPD,16,30,sample_demo
+apollo-farah-emergency,Dr. Farah Khan,Apollo Hospitals,Emergency Medicine,Monday,00:00:00,08:00:00,Emergency Duty,16,30,sample_demo
+apollo-farah-emergency,Dr. Farah Khan,Apollo Hospitals,Emergency Medicine,Thursday,08:00:00,16:00:00,Emergency Duty,16,30,sample_demo
+fortis-abhishek-emergency,Dr. Abhishek Suri,Fortis Escorts Heart Institute,Emergency Medicine,Tuesday,16:00:00,23:59:00,Emergency Duty,16,30,sample_demo
+fortis-abhishek-emergency,Dr. Abhishek Suri,Fortis Escorts Heart Institute,Emergency Medicine,Saturday,08:00:00,16:00:00,Emergency Duty,16,30,sample_demo

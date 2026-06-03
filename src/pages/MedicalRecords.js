@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import { api } from "../utils/api.js";
+import { analyzeLabReport, extractTextFromFile } from "../utils/labReportAnalyzer.js";
 import "./Dashboard.css";
 import "./MedicalRecords.css";
 
@@ -33,6 +34,10 @@ export default function MedicalRecords() {
   const [newNotes, setNewNotes] = useState("");
   const [newVitalsInput, setNewVitalsInput] = useState(""); // E.g. "Metric: Value, Metric: Value"
   const [selectedFile, setSelectedFile] = useState(null);
+  const [reportText, setReportText] = useState("");
+  const [parseStatus, setParseStatus] = useState("");
+  const [parseError, setParseError] = useState("");
+  const [parsedVitalsPreview, setParsedVitalsPreview] = useState([]);
 
   // Sharing states
   const [activeShareId, setActiveShareId] = useState(null);
@@ -41,10 +46,10 @@ export default function MedicalRecords() {
   // Filter records based on search and category tab
   const filteredRecords = records.filter((r) => {
     const matchesSearch =
-      r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.doctor.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.facility.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.type.toLowerCase().includes(searchQuery.toLowerCase());
+      (r.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (r.doctor || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (r.facility || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (r.type || "").toLowerCase().includes(searchQuery.toLowerCase());
 
     if (!matchesSearch) return false;
 
@@ -57,10 +62,48 @@ export default function MedicalRecords() {
     return false;
   });
 
-  // Handle Mock File Selector
-  const handleFileSelect = (e) => {
+  const runAnalysisForText = (text) => {
+    const result = analyzeLabReport(text);
+    setParsedVitalsPreview(result.vitals);
+    return result;
+  };
+
+  const clearSelectedFile = () => {
+    setSelectedFile(null);
+    setReportText("");
+    setParseStatus("");
+    setParseError("");
+    setParsedVitalsPreview([]);
+    const input = document.getElementById("file-upload-input");
+    if (input) input.value = "";
+  };
+
+  // Handle File Selector and parse readable report text.
+  const handleFileSelect = async (e) => {
     if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+      const file = e.target.files[0];
+      setSelectedFile(file);
+      setParseError("");
+      setParseStatus("Reading report...");
+      if (!newTitle.trim()) {
+        setNewTitle(file.name.replace(/\.[^.]+$/, ""));
+      }
+
+      try {
+        await new Promise(resolve => setTimeout(resolve, 20));
+        const text = await extractTextFromFile(file);
+        setReportText(text);
+        const result = runAnalysisForText(text);
+        if (!text.trim()) {
+          setParseError("This file did not expose readable lab values. Add the important values manually below if it is a scanned image.");
+        } else if (!result.vitals.length) {
+          setParseError("Readable text was found, but no supported lab values were detected. Add missing values manually below if needed.");
+        }
+      } catch (err) {
+        setParseError(err.message || "Unable to read this file. Add the important values manually below if needed.");
+      } finally {
+        setParseStatus("");
+      }
     }
   };
 
@@ -70,19 +113,24 @@ export default function MedicalRecords() {
     if (!newTitle.trim()) return;
     setUploading(true);
 
-    // Parse Vitals string: "HbA1c: 6.0%, Vitamin D: 30"
-    const parsedVitals = [];
+    const reportResult = runAnalysisForText(reportText);
+    const parsedVitals = reportResult.vitals.filter(vital => vital.valid);
+
     if (newVitalsInput.trim()) {
-      const parts = newVitalsInput.split(",");
-      parts.forEach((part) => {
-        const colonIndex = part.indexOf(":");
-        if (colonIndex !== -1) {
-          const name = part.substring(0, colonIndex).trim();
-          const value = part.substring(colonIndex + 1).trim();
-          parsedVitals.push({ name, value, range: "Referenced", status: "Normal" });
+      const manualResult = analyzeLabReport(newVitalsInput.replace(/,/g, "\n"));
+      manualResult.vitals.filter(vital => vital.valid).forEach((manualVital) => {
+        const existingIndex = parsedVitals.findIndex(vital => vital.name === manualVital.name);
+        if (existingIndex === -1) {
+          parsedVitals.push(manualVital);
+        } else {
+          parsedVitals[existingIndex] = manualVital;
         }
       });
     }
+
+    const finalAnalysis = analyzeLabReport(
+      `${reportText}\n${newVitalsInput.replace(/,/g, "\n")}`
+    ).analysis;
 
     // Assign color based on category
     let color = "#e8f5ee";
@@ -101,8 +149,13 @@ export default function MedicalRecords() {
       color,
       doctor: newDoctor || "Dr. Self Reported",
       facility: newFacility || "Personal Upload",
-      notes: newNotes || "No notes provided.",
-      vitals: parsedVitals.length > 0 ? parsedVitals : [{ name: "Document Status", value: "Archived", range: "N/A", status: "Normal" }]
+      notes: newNotes || (
+        finalAnalysis.abnormalCount
+          ? `${finalAnalysis.abnormalCount} abnormal lab level${finalAnalysis.abnormalCount === 1 ? "" : "s"} detected.`
+          : "No abnormal supported lab levels detected."
+      ),
+      vitals: parsedVitals,
+      analysis: finalAnalysis,
     };
 
     try {
@@ -123,13 +176,34 @@ export default function MedicalRecords() {
     setNewNotes("");
     setNewVitalsInput("");
     setSelectedFile(null);
+    setReportText("");
+    setParseStatus("");
+    setParseError("");
+    setParsedVitalsPreview([]);
     setShowUploadModal(false);
   };
 
   // Simulate file download
   const handleDownload = (e, name) => {
-    e.stopPropagation(); // prevent modal opening
+    if (e) e.stopPropagation(); // prevent modal opening
     alert(`Starting download for: ${name}\nFile size: Mock PDF file compiled successfully.`);
+  };
+
+  // Delete medical record from backend and local state
+  const handleDeleteRecord = async (e, recordId) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm("Are you sure you want to delete this medical record? This will also remove any vitals associated with it.")) {
+      return;
+    }
+    try {
+      await api.delete(`/medical-records/${recordId}`);
+      setRecords(records.filter(r => r.id !== recordId));
+      if (selectedRecord && selectedRecord.id === recordId) {
+        setSelectedRecord(null);
+      }
+    } catch (err) {
+      alert("Failed to delete medical record: " + err.message);
+    }
   };
 
   // Generate Doctor Sharing link
@@ -143,6 +217,40 @@ export default function MedicalRecords() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const statusText = (status) => String(status || "").toLowerCase();
+  const displayStatus = (status) => {
+    const value = statusText(status);
+    return value ? value.charAt(0).toUpperCase() + value.slice(1) : "Uncertain";
+  };
+  const sourcePage = (vital) => Number(vital.source_page || vital.sourcePage || 0);
+  const confidence = (vital) => Number(vital.confidence || 0);
+  const isConfirmedAbnormal = (vital) =>
+    ["high", "low", "critical"].includes(statusText(vital.status));
+  const vitalValueClass = (status) => `mr-vital-value ${statusText(status) || "uncertain"}`;
+  const trackerStatus = (vital) => {
+    const value = statusText(vital.status);
+    if (value === "normal") return "normal";
+    if (value === "critical") return "critical";
+    if (value === "high") return "high";
+    return "borderline";
+  };
+
+  const trendItems = records
+    .flatMap(record => (record.vitals || []).map(vital => ({ ...vital, recordName: record.name, recordDate: record.date })))
+    .filter(vital => vital.name && vital.value && vital.valid !== false);
+  const groupedTrendItems = {
+    normal: trendItems.filter(vital => trackerStatus(vital) === "normal"),
+    borderline: trendItems.filter(vital => trackerStatus(vital) === "borderline"),
+    high: trendItems.filter(vital => trackerStatus(vital) === "high"),
+    critical: trendItems.filter(vital => trackerStatus(vital) === "critical"),
+  };
+
+  const validPreview = parsedVitalsPreview.filter(v => v.valid);
+  const abnormalRecordVitals = selectedRecord
+    ? (selectedRecord.vitals || []).filter(isConfirmedAbnormal)
+    : [];
+  const selectedRecordFindings = [];
 
   return (
     <DashboardLayout activeTab="records">
@@ -263,6 +371,17 @@ export default function MedicalRecords() {
                         <button className="mr-btn-action secondary">
                           👁 View
                         </button>
+                        <button
+                          className="mr-btn-action danger"
+                          onClick={(e) => handleDeleteRecord(e, r.id)}
+                          style={{
+                            background: "#fee2e2",
+                            color: "#b91c1c",
+                            borderColor: "#fca5a5"
+                          }}
+                        >
+                          🗑️ Delete
+                        </button>
                       </div>
                     </div>
                   ))
@@ -296,7 +415,7 @@ export default function MedicalRecords() {
                 </p>
               </div>
 
-              {records.length === 0 ? (
+              {trendItems.length === 0 ? (
                 <div style={{
                   display: "flex",
                   flexDirection: "column",
@@ -317,75 +436,105 @@ export default function MedicalRecords() {
                 </div>
               ) : (
                 <div className="mr-vitals-trends-list">
-                  {/* Glucose trend */}
-                  <div className="mr-trend-item">
-                    <div className="mr-trend-top">
-                      <span className="mr-trend-label">HbA1c (Blood Sugar)</span>
-                      <span className="mr-trend-status warning">Pre-diabetic</span>
-                    </div>
-                    <div className="mr-trend-middle">
-                      <span className="mr-trend-value">6.2%</span>
-                      <span className="mr-trend-change down">↓ -0.3% (from 6.5%)</span>
-                    </div>
-                    <div className="mr-sparkline-wrap">
-                      <span>Aug 24: 6.8%</span>
-                      <div className="mr-spark-bar-container">
-                        <div
-                          className="mr-spark-bar-fill"
-                          style={{ width: "62%", background: "var(--amber)" }}
-                        />
+                  {trendItems.map((vital, index) => (
+                    <div className="mr-trend-item" key={`${vital.recordName}-${vital.name}-${index}`}>
+                      <div className="mr-trend-top">
+                        <span className="mr-trend-label">{vital.name}</span>
+                        <span className={`mr-trend-status ${statusText(vital.status)}`}>
+                          {displayStatus(vital.status)}
+                        </span>
                       </div>
-                      <span>Mar 25: 6.2%</span>
-                    </div>
-                  </div>
-
-                  {/* Cholesterol Trend */}
-                  <div className="mr-trend-item">
-                    <div className="mr-trend-top">
-                      <span className="mr-trend-label">Total Cholesterol</span>
-                      <span className="mr-trend-status normal">Optimal</span>
-                    </div>
-                    <div className="mr-trend-middle">
-                      <span className="mr-trend-value">180 mg/dL</span>
-                      <span className="mr-trend-change down">↓ -15 mg/dL (from 195)</span>
-                    </div>
-                    <div className="mr-sparkline-wrap">
-                      <span>Nov 24: 195</span>
-                      <div className="mr-spark-bar-container">
-                        <div
-                          className="mr-spark-bar-fill"
-                          style={{ width: "80%", background: "var(--green-cta)" }}
-                        />
+                      <div className="mr-trend-middle">
+                        <span className="mr-trend-value">{vital.value} {vital.unit || ""}</span>
+                        <span className="mr-trend-change up-bad">
+                          Confirmed row match
+                        </span>
                       </div>
-                      <span>Mar 25: 180</span>
-                    </div>
-                  </div>
-
-                  {/* Vitamin D Trend */}
-                  <div className="mr-trend-item">
-                    <div className="mr-trend-top">
-                      <span className="mr-trend-label">Vitamin D3</span>
-                      <span className="mr-trend-status normal">Sufficient</span>
-                    </div>
-                    <div className="mr-trend-middle">
-                      <span className="mr-trend-value">32 ng/mL</span>
-                      <span className="mr-trend-change up-good">↑ +14 ng/mL (from 18)</span>
-                    </div>
-                    <div className="mr-sparkline-wrap">
-                      <span>Aug 23: 18</span>
-                      <div className="mr-spark-bar-container">
-                        <div
-                          className="mr-spark-bar-fill"
-                          style={{ width: "100%", background: "var(--green-cta)" }}
-                        />
+                      <div className="mr-sparkline-wrap">
+                        <span>{vital.recordDate}</span>
+                        <div className="mr-spark-bar-container">
+                          <div
+                            className="mr-spark-bar-fill"
+                            style={{
+                              width: "100%",
+                              background: "var(--red)",
+                            }}
+                          />
+                        </div>
+                        <span>{vital.recordName}</span>
                       </div>
-                      <span>Mar 25: 32</span>
                     </div>
-                  </div>
+                  ))}
                 </div>
               )}
             </div>
           </div>
+        </div>
+
+        <div className="mr-insights-card mr-tracker-section">
+          <div className="mr-insights-header">
+            <h2 className="mr-section-title">Key Vitals Trend Tracker</h2>
+            <p className="mr-insights-subtitle">
+              Aggregated and parsed metrics from your uploaded medical records.
+            </p>
+          </div>
+
+          {trendItems.length === 0 ? (
+            <div className="mr-tracker-empty">
+              <div className="mr-tracker-empty-icon">Vitals</div>
+              <h4>No vitals tracked yet</h4>
+              <p>
+                Once you upload reports containing clinical results, your key metrics will appear here automatically.
+              </p>
+            </div>
+          ) : (
+            <div className="mr-tracker-groups">
+              {[
+                { key: "normal", title: "Normal", items: groupedTrendItems.normal },
+                { key: "borderline", title: "Borderline", items: groupedTrendItems.borderline },
+                { key: "high", title: "High", items: groupedTrendItems.high },
+                { key: "critical", title: "Critical", items: groupedTrendItems.critical },
+              ].map(group => (
+                <section className={`mr-tracker-group ${group.key}`} key={group.key}>
+                  <div className="mr-tracker-group-header">
+                    <h3>{group.title}</h3>
+                    <span>{group.items.length}</span>
+                  </div>
+                  {group.items.length === 0 ? (
+                    <p className="mr-tracker-empty-group">No {group.title.toLowerCase()} vitals.</p>
+                  ) : (
+                    <div className="mr-vitals-trends-list">
+                      {group.items.map((vital, index) => (
+                        <div className={`mr-trend-item ${trackerStatus(vital)}`} key={`${group.key}-${vital.recordName}-${vital.name}-${index}`}>
+                          <div className="mr-trend-top">
+                            <span className="mr-trend-label">{vital.name}</span>
+                            <span className={`mr-trend-status ${trackerStatus(vital)}`}>
+                              {group.title}
+                            </span>
+                          </div>
+                          <div className="mr-trend-middle">
+                            <span className={`mr-trend-value ${trackerStatus(vital)}`}>
+                              {vital.value} {vital.unit || ""}
+                            </span>
+                            <span className="mr-trend-change">
+                              {vital.reference_range || vital.range || "No report range"}
+                            </span>
+                          </div>
+                          <div className="mr-sparkline-wrap">
+                            <span>{vital.recordDate || "Date not set"}</span>
+                            <div className="mr-spark-bar-container">
+                              <div className={`mr-spark-bar-fill ${trackerStatus(vital)}`} style={{ width: "100%" }} />
+                            </div>
+                            <span>{vital.recordName}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -473,16 +622,16 @@ export default function MedicalRecords() {
                   </div>
 
                   <div className="mr-form-field">
-                    <label className="mr-form-label">Extractable Key Vitals (Optional)</label>
+                    <label className="mr-form-label">Add Missing Lab Values (Optional)</label>
                     <input
                       type="text"
                       className="mr-form-input"
-                      placeholder="Format: Metric: Value, Metric: Value (e.g. TSH: 2.4 mIU/L, Thyroxine: 1.2 ng/dL)"
+                      placeholder="Only if the upload misses something: TSH: 7.8, Vitamin D: 18"
                       value={newVitalsInput}
                       onChange={(e) => setNewVitalsInput(e.target.value)}
                     />
                     <small style={{ fontSize: 10.5, color: "var(--text-muted)", marginTop: 2 }}>
-                      Separate multiple metrics with commas. They will display in your parsed vitals table.
+                      The app classifies these values too. Use commas between values.
                     </small>
                   </div>
 
@@ -516,10 +665,92 @@ export default function MedicalRecords() {
 
                     {selectedFile && (
                       <div className="mr-selected-file-badge">
+                        <span>
                         📄 {selectedFile.name} ({(selectedFile.size / 1024).toFixed(0)} KB)
+                        </span>
+                        <button type="button" onClick={clearSelectedFile}>
+                          Remove
+                        </button>
                       </div>
                     )}
+                    {parseStatus && <div className="mr-parse-status">{parseStatus}</div>}
+                    {parseError && <div className="mr-parse-error">{parseError}</div>}
                   </div>
+
+                  {false && parsedVitalsPreview.length > 0 && (
+                    <div className="mr-ai-preview-card">
+                      <div className="mr-ai-preview-title">
+                        {validPreview.length > 0 ? `⚠️ ${validPreview.length} Abnormal Level${validPreview.length === 1 ? '' : 's'} Detected` : '✅ All Detected Levels Normal'}
+                      </div>
+                      {validPreview.length > 0 ? (
+                        <div className="mr-abnormal-list">
+                          {validPreview.map((vital, index) => (
+                            <div key={`${vital.name}-${index}`} className="mr-abnormal-item-v2">
+                              <div className="mr-abnormal-item-header">
+                                <strong className="mr-abnormal-name">{vital.name}</strong>
+                                <span className={`mr-vitals-status-pill ${vital.status.toLowerCase()}`}>
+                                  {vital.status}
+                                </span>
+                              </div>
+                              <div className="mr-abnormal-values-row">
+                                <span className="mr-abnormal-current-val">Current: <b>{vital.value}</b></span>
+                                <span className="mr-abnormal-ref-val">Normal Range: {vital.range}</span>
+                              </div>
+                              {vital.possibleConditions?.length > 0 && (
+                                <div className="mr-abnormal-conditions">
+                                  <span className="mr-abnormal-conditions-label">Possible causes:</span>
+                                  <div className="mr-abnormal-conditions-list">
+                                    {vital.possibleConditions.map((cond, ci) => (
+                                      <span key={ci} className="mr-condition-tag">{cond}</span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p style={{ fontSize: 13, color: 'var(--text-mid)', margin: '8px 0 0' }}>No abnormal supported lab levels were detected from the readable values.</p>
+                      )}
+                    </div>
+                  )}
+                  
+                  {parsedVitalsPreview.length > 0 && (
+                    <div className="mr-ai-preview-card">
+                      <div className="mr-ai-preview-title">
+                        {validPreview.length > 0
+                          ? `${validPreview.length} Extracted Lab Value${validPreview.length === 1 ? "" : "s"}`
+                          : "No Extracted Lab Values"}
+                      </div>
+                      {validPreview.length > 0 ? (
+                        <div className="mr-abnormal-list">
+                          {validPreview.map((vital, index) => (
+                            <div key={`${vital.name}-${index}`} className="mr-abnormal-item-v2">
+                              <div className="mr-abnormal-item-header">
+                                <strong className="mr-abnormal-name">{vital.test_name || vital.name}</strong>
+                                <span className={`mr-vitals-status-pill ${statusText(vital.status)}`}>
+                                  {displayStatus(vital.status)}
+                                </span>
+                              </div>
+                              <div className="mr-abnormal-values-row">
+                                <span className={`mr-abnormal-current-val ${statusText(vital.status)}`}>
+                                  Value: <b className={vitalValueClass(vital.status)}>{vital.value} {vital.unit || ""}</b>
+                                </span>
+                                <span className="mr-abnormal-ref-val">Report Range: {vital.reference_range || vital.range}</span>
+                              </div>
+                              <small className="mr-source-trace">
+                                Page {sourcePage(vital)} | Confidence {confidence(vital)}%
+                              </small>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p style={{ fontSize: 13, color: "var(--text-mid)", margin: "8px 0 0" }}>
+                          Results are extracted from the report. Please verify with the original document.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="mr-modal-footer">
@@ -581,7 +812,7 @@ export default function MedicalRecords() {
                     {/* Show structured table mockup */}
                     <div className="mr-doc-table-mock">
                       <div className="mr-doc-table-header"></div>
-                      {selectedRecord.vitals.map((v, i) => (
+                      {(selectedRecord.vitals || []).map((v, i) => (
                         <div className="mr-doc-table-row" key={i}>
                           <div className="mr-doc-table-cell" style={{ width: "30%" }}></div>
                           <div className="mr-doc-table-cell" style={{ width: "20%" }}></div>
@@ -628,37 +859,111 @@ export default function MedicalRecords() {
                     <span className="mr-viewer-facility">{selectedRecord.facility}</span>
                   </div>
 
+                  {/* AI Interpretations of findings, showing big and individually */}
+                  {selectedRecord.type === "Lab Report" && selectedRecordFindings.length > 0 ? (
+                    <div className="mr-viewer-section">
+                      <span className="mr-viewer-label">🔬 Clinical Findings & Analysis</span>
+                      <div className="mr-findings-list">
+                        {selectedRecordFindings.map((group, index) => (
+                          <div key={index} className={`mr-finding-card ${group.severity}`}>
+                            <div className="mr-finding-card-header">
+                              <span className="mr-finding-badge">{group.badge}</span>
+                              <h4 className="mr-finding-title">{group.title}</h4>
+                              <span className={`mr-finding-severity-pill ${group.severity}`}>
+                                {group.severity === "high" ? "Action Required" : group.severity === "warning" ? "Borderline" : "Normal"}
+                              </span>
+                            </div>
+                            <div className="mr-finding-vitals-summary">
+                              {group.vitals.map((vital, vitalIdx) => (
+                                <div key={vitalIdx} className="mr-finding-vital-row">
+                                  <span className="mr-finding-vital-name">{vital.name}</span>
+                                  <span className={`mr-finding-vital-val ${statusText(vital.status)}`}>{vital.value}</span>
+                                  <span className="mr-finding-vital-range">Ref: {vital.range}</span>
+                                  <span className={`mr-vitals-status-pill ${vital.status.toLowerCase()}`}>
+                                    {vital.status}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                            <p className="mr-finding-interpretation">{group.interpretation}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {false && abnormalRecordVitals.length > 0 && (
+                        <div className="mr-viewer-section">
+                          <span className="mr-viewer-label">Abnormal Lab Levels</span>
+                          <table className="mr-vitals-table">
+                            <thead>
+                              <tr>
+                                <th>Parameter</th>
+                                <th>Observed Value</th>
+                                <th>Reference Range</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {abnormalRecordVitals.map((v, i) => (
+                                <tr key={i}>
+                                  <td style={{ fontWeight: 600 }}>{v.name}</td>
+                                  <td>{v.value}</td>
+                                  <td>
+                                    <span style={{ color: "var(--text-muted)" }}>{v.range} </span>
+                                    <span className={`mr-vitals-status-pill ${(v.status || "Normal").toLowerCase()}`}>
+                                      {v.status || "Normal"}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </>
+                  )}
+
                   <div className="mr-viewer-section">
-                    <span className="mr-viewer-label">Parsed Health Vitals & Observations</span>
+                    <span className="mr-viewer-label">Confirmed Abnormal Lab Rows</span>
                     <table className="mr-vitals-table">
                       <thead>
                         <tr>
-                          <th>Parameter</th>
-                          <th>Observed Value</th>
-                          <th>Reference Range</th>
+                          <th>Test</th>
+                          <th>Value</th>
+                          <th>Unit</th>
+                          <th>Report Range</th>
+                          <th>Source</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {selectedRecord.vitals.map((v, i) => (
-                          <tr key={i}>
-                            <td style={{ fontWeight: 600 }}>{v.name}</td>
-                            <td>{v.value}</td>
-                            <td>
-                              <span style={{ color: "var(--text-muted)" }}>{v.range} </span>
-                              {v.status !== "Normal" && (
-                                <span className={`mr-vitals-status-pill ${v.status.toLowerCase()}`}>
-                                  {v.status}
-                                </span>
-                              )}
+                        {abnormalRecordVitals.length === 0 ? (
+                          <tr>
+                            <td colSpan="5" style={{ color: "var(--text-muted)" }}>
+                              No abnormal alert is shown because no row-validated result met the 95 confidence rule.
                             </td>
                           </tr>
-                        ))}
+                        ) : (
+                          abnormalRecordVitals.map((v, i) => (
+                            <tr key={i}>
+                              <td style={{ fontWeight: 600 }}>{v.test_name || v.name}</td>
+                              <td className={vitalValueClass(v.status)}>{v.value}</td>
+                              <td>{v.unit || "-"}</td>
+                              <td>
+                                <span style={{ color: "var(--text-muted)" }}>{v.reference_range || v.range || "-"} </span>
+                                <span className={`mr-vitals-status-pill ${statusText(v.status)}`}>
+                                  {displayStatus(v.status)}
+                                </span>
+                              </td>
+                              <td>Page {sourcePage(v)} | {confidence(v)}%</td>
+                            </tr>
+                          ))
+                        )}
                       </tbody>
                     </table>
                   </div>
 
                   <div className="mr-viewer-section">
-                    <span className="mr-viewer-label">Clinical Comments</span>
+                    <span className="mr-viewer-label">Clinical Comments / Summary</span>
                     <p className="mr-viewer-notes">
                       {selectedRecord.notes}
                     </p>
@@ -703,8 +1008,20 @@ export default function MedicalRecords() {
             </div>
             <div className="mr-modal-footer">
               <button
+                className="mr-btn-action danger"
+                onClick={(e) => handleDeleteRecord(e, selectedRecord.id)}
+                style={{
+                  background: "#fee2e2",
+                  color: "#b91c1c",
+                  borderColor: "#fca5a5",
+                  marginRight: "auto"
+                }}
+              >
+                🗑️ Delete Record
+              </button>
+              <button
                 className="mr-btn-action secondary"
-                onClick={() => handleDownload(null, selectedRecord.name)}
+                onClick={(e) => handleDownload(null, selectedRecord.name)}
               >
                 ⬇ Download PDF
               </button>

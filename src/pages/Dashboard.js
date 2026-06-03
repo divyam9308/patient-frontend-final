@@ -1,7 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import DashboardLayout from "../components/DashboardLayout";
-import { api } from "../utils/api.js";
+import {
+  api,
+  getDoctorEmergencyAlerts,
+  acceptEmergencyAlert,
+  declineEmergencyAlert,
+} from "../utils/api.js";
 import "./Dashboard.css";
 
 /* ─── Stat Card ─── */
@@ -477,225 +482,125 @@ function RecordsTab() {
   return null;
 }
 
-/* ─── DOCTOR ALERTS TAB ─── */
-function AlertsTab() {
-  const [alerts, setAlerts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  // For demo: Assume the doctor_hospital_id is either in the user object or we fetch all
-  const user = (() => { try { return JSON.parse(localStorage.getItem('user')) || {}; } catch { return {}; } })();
-  
-  const fetchAlerts = () => {
-    setLoading(true);
-    api.get(`/doctor/emergency-alerts`) // Add ?doctorHospitalId=... if you have it in user profile
-      .then(data => {
-        setAlerts(data);
-      })
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    fetchAlerts();
-    // Poll every 10 seconds for new alerts
-    const interval = setInterval(fetchAlerts, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleAccept = async (requestId, doctorHospitalId) => {
-    try {
-      // In a real app, doctor_id and doctor_hospital_id come from the logged-in doctor's session
-      // For demo, we'll just send the doctorHospitalId from the alert itself and a dummy doctor_id
-      await api.post(`/doctor/emergency-alerts/${requestId}/accept`, {
-        doctor_hospital_id: doctorHospitalId,
-        doctor_id: user.id || '00000000-0000-0000-0000-000000000000'
-      });
-      fetchAlerts();
-    } catch (err) {
-      alert("Error accepting alert: " + err.message);
-    }
-  };
-
-  const handleDecline = async (requestId, doctorHospitalId) => {
-    try {
-      await api.post(`/doctor/emergency-alerts/${requestId}/decline`, {
-        doctor_hospital_id: doctorHospitalId
-      });
-      fetchAlerts();
-    } catch (err) {
-      alert("Error declining alert: " + err.message);
-    }
-  };
-
-  if (loading && alerts.length === 0) return <div style={{ padding: 20 }}>Loading alerts...</div>;
-  if (error) return <div style={{ padding: 20, color: 'red' }}>Error: {error}</div>;
-
-  return (
-    <div>
-      <div className="db-card">
-        <div className="db-card-header">
-          <div className="db-card-title">🚨 Active Emergency Alerts</div>
-          <button className="db-card-action" onClick={fetchAlerts}>Refresh</button>
-        </div>
-        
-        {alerts.length === 0 ? (
-          <div style={{ padding: '30px 20px', textAlign: 'center', color: '#64748b' }}>
-            No active emergency alerts at this time.
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '16px' }}>
-            {alerts.map(a => (
-              <div key={a.id} style={{ border: '2px solid #fecaca', borderRadius: '12px', padding: '20px', background: '#fef2f2' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                  <div>
-                    <div style={{ color: '#dc2626', fontWeight: '800', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ animation: 'pulse-red 2s infinite' }}>🔴</span> 
-                      EMERGENCY REQUEST
-                    </div>
-                    <div style={{ color: '#991b1b', fontSize: '14px', marginTop: '4px', fontWeight: '600' }}>
-                      Received: {new Date(a.created_at).toLocaleTimeString()}
-                    </div>
-                  </div>
-                  {a.emergency_requests?.ambulance_requested && (
-                    <div style={{ background: '#fef3c7', color: '#b45309', padding: '4px 12px', borderRadius: '50px', fontSize: '13px', fontWeight: '700', border: '1px solid #fde68a' }}>
-                      🚑 AMBULANCE REQUESTED
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ background: 'white', padding: '16px', borderRadius: '8px', border: '1px solid #fecaca', marginBottom: '16px' }}>
-                  <div style={{ marginBottom: '8px' }}>
-                    <strong style={{ color: '#475569' }}>Symptoms / Notes:</strong>
-                    <div style={{ color: '#0f172a', marginTop: '4px' }}>{a.emergency_requests?.symptoms || 'None provided'}</div>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px', fontSize: '14px' }}>
-                    <div>
-                      <strong style={{ color: '#475569' }}>Patient Location:</strong>
-                      <div style={{ color: '#0f172a' }}>{a.emergency_requests?.patient_location || 'Unknown'}</div>
-                    </div>
-                    <div>
-                      <strong style={{ color: '#475569' }}>Patient Contact:</strong>
-                      <div style={{ color: '#0f172a' }}>{a.emergency_requests?.patient_phone || 'Unknown'}</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                  <button 
-                    onClick={() => handleDecline(a.emergency_request_id, a.doctor_hospital_id)}
-                    style={{ padding: '10px 24px', borderRadius: '8px', border: '1.5px solid #fca5a5', background: 'white', color: '#dc2626', fontWeight: '700', cursor: 'pointer' }}
-                  >
-                    Decline
-                  </button>
-                  <button 
-                    onClick={() => handleAccept(a.emergency_request_id, a.doctor_hospital_id)}
-                    style={{ padding: '10px 24px', borderRadius: '8px', border: 'none', background: '#dc2626', color: 'white', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 12px rgba(220,38,38,0.3)' }}
-                  >
-                    ACCEPT & PREPARE
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ─── EMERGENCY ALERTS TAB ─── */
 function EmergencyAlertsTab() {
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [workingId, setWorkingId] = useState("");
 
-  const fetchAlerts = () => {
+  const loadAlerts = useCallback(async () => {
     setLoading(true);
-    api.get('/doctor/emergency-alerts')
-      .then(data => setAlerts(data))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    fetchAlerts();
-    const interval = setInterval(fetchAlerts, 10000); // poll every 10s
-    return () => clearInterval(interval);
+    setError("");
+    try {
+      const doctorHospitalId = localStorage.getItem("doctor_hospital_id") || "";
+      const data = await getDoctorEmergencyAlerts(doctorHospitalId);
+      setAlerts(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err.message || "Unable to load emergency alerts");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  useEffect(() => {
+    loadAlerts();
+    const timer = setInterval(loadAlerts, 15000);
+    return () => clearInterval(timer);
+  }, [loadAlerts]);
+
   const handleAccept = async (alert) => {
-    if (!window.confirm("Accept this emergency request?")) return;
+    const requestId = alert.emergency_request_id || alert.emergency_requests?.id;
+    if (!requestId || !alert.doctor_hospital_id) return;
+
+    setWorkingId(alert.id);
     try {
-      // In a real app we'd pass the actual doctor's id. For demo, we fake it using the alert's assigned hospital.
-      await api.post(`/doctor/emergency-alerts/${alert.emergency_request_id}/accept`, {
-        doctor_hospital_id: alert.doctor_hospital_id,
-        doctor_id: '00000000-0000-0000-0000-000000000000' // dummy or we'd fetch doctor_id
-      });
-      fetchAlerts();
-      alert("Emergency request accepted successfully.");
+      await acceptEmergencyAlert(requestId, { doctor_hospital_id: alert.doctor_hospital_id });
+      await loadAlerts();
     } catch (err) {
-      alert("Error: " + err.message);
+      setError(err.message || "Unable to accept emergency alert");
+    } finally {
+      setWorkingId("");
     }
   };
 
   const handleDecline = async (alert) => {
+    const requestId = alert.emergency_request_id || alert.emergency_requests?.id;
+    if (!requestId || !alert.doctor_hospital_id) return;
+
+    setWorkingId(alert.id);
     try {
-      await api.post(`/doctor/emergency-alerts/${alert.emergency_request_id}/decline`, {
-        doctor_hospital_id: alert.doctor_hospital_id
-      });
-      fetchAlerts();
+      await declineEmergencyAlert(requestId, { doctor_hospital_id: alert.doctor_hospital_id });
+      setAlerts(prev => prev.filter(item => item.id !== alert.id));
     } catch (err) {
-      alert("Error: " + err.message);
+      setError(err.message || "Unable to decline emergency alert");
+    } finally {
+      setWorkingId("");
     }
   };
 
   return (
-    <div>
+    <div className="db-emergency-alerts">
+      {error && <div className="db-alert-error">{error}</div>}
+
       <div className="db-card">
         <div className="db-card-header">
-          <div className="db-card-title">🚨 Active Emergency Alerts</div>
-          <button className="db-card-action" onClick={fetchAlerts}>Refresh ↻</button>
+          <div className="db-card-title">Emergency Alerts</div>
+          <button className="db-card-action" onClick={loadAlerts}>Refresh</button>
         </div>
-        <div style={{ padding: '16px' }}>
-          {loading && alerts.length === 0 ? (
-            <div style={{ color: '#64748b' }}>Loading alerts...</div>
-          ) : alerts.length === 0 ? (
-            <div style={{ color: '#64748b' }}>No active emergency alerts at this time.</div>
-          ) : (
-            alerts.map(a => {
-              const req = a.emergency_requests;
-              if (!req) return null;
+
+        {loading ? (
+          <div className="db-empty-state">Loading emergency alerts...</div>
+        ) : alerts.length === 0 ? (
+          <div className="db-empty-state">No open emergency alerts right now.</div>
+        ) : (
+          <div className="db-alert-list">
+            {alerts.map(alert => {
+              const request = alert.emergency_requests || {};
+              const hospital = request.hospitals?.name || "Selected hospital";
+              const department = request.departments?.name || "Department";
+              const requestedAt = request.created_at
+                ? new Date(request.created_at).toLocaleString()
+                : "Just now";
+
               return (
-                <div key={a.id} style={{ border: '2px solid #fca5a5', borderRadius: '12px', padding: '16px', marginBottom: '16px', background: '#fef2f2' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <h3 style={{ margin: '0 0 8px 0', color: '#b91c1c' }}>🚨 Emergency Request #{req.id.substring(0, 8)}</h3>
-                      <div style={{ fontSize: '14px', marginBottom: '4px' }}><strong>Symptoms:</strong> {req.symptoms}</div>
-                      <div style={{ fontSize: '14px', marginBottom: '4px' }}><strong>Location:</strong> {req.patient_location}</div>
-                      <div style={{ fontSize: '14px', marginBottom: '4px' }}><strong>Phone:</strong> {req.patient_phone}</div>
-                      <div style={{ fontSize: '14px', marginBottom: '4px' }}><strong>Hospital:</strong> {req.hospitals?.name} ({req.departments?.name})</div>
-                      {req.ambulance_requested && (
-                        <div style={{ fontSize: '14px', color: '#b45309', fontWeight: 'bold', marginTop: '8px' }}>🚑 Ambulance Requested</div>
-                      )}
+                <div className="db-alert-item" key={alert.id}>
+                  <div className="db-alert-main">
+                    <div className="db-alert-topline">
+                      <span className="db-alert-pill">Open</span>
+                      <span className="db-alert-time">{requestedAt}</span>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <button 
-                        onClick={() => handleAccept(a)}
-                        style={{ padding: '8px 16px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
-                        ✓ Accept Case
-                      </button>
-                      <button 
-                        onClick={() => handleDecline(a)}
-                        style={{ padding: '8px 16px', background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
-                        ✕ Decline
-                      </button>
+                    <div className="db-alert-symptoms">{request.symptoms || "Emergency symptoms not listed"}</div>
+                    <div className="db-alert-meta">{hospital} - {department}</div>
+                    <div className="db-alert-meta">
+                      Location: {request.patient_location || "Not provided"}
+                      {request.patient_phone && <> - Phone: {request.patient_phone}</>}
                     </div>
+                    <div className="db-alert-meta">
+                      Ambulance requested: {request.ambulance_requested ? "Yes" : "No"}
+                      {request.ambulance_status && <> - Status: {request.ambulance_status}</>}
+                    </div>
+                  </div>
+                  <div className="db-alert-actions">
+                    <button
+                      className="db-alert-accept"
+                      disabled={workingId === alert.id}
+                      onClick={() => handleAccept(alert)}
+                    >
+                      {workingId === alert.id ? "Working..." : "Accept"}
+                    </button>
+                    <button
+                      className="db-alert-decline"
+                      disabled={workingId === alert.id}
+                      onClick={() => handleDecline(alert)}
+                    >
+                      Decline
+                    </button>
                   </div>
                 </div>
               );
-            })
-          )}
-        </div>
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -731,7 +636,7 @@ export default function Dashboard() {
     overview: { title: "Dashboard", sub: "Welcome back, " + (user?.name ? user.name.split(' ')[0] : 'there') },
     profile: { title: "My Profile", sub: "Manage your personal information and Aadhar details" },
     records: { title: "Medical Records", sub: "Access and download your health documents" },
-    "emergency-alerts": { title: "Emergency Alerts", sub: "Review and accept incoming emergency cases" },
+    "emergency-alerts": { title: "Emergency Alerts", sub: "Open emergency requests waiting for doctor response" },
   };
 
   return (

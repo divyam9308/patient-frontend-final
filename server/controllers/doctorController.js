@@ -2,21 +2,27 @@ import supabase from '../config/supabaseClient.js';
 
 export const getDoctorEmergencyAlerts = async (req, res) => {
   try {
-    // In a real app, this would filter by the logged-in doctor's doctor_hospital_id.
-    // For demo purposes, if doctorHospitalId is provided in query, use it, else return all open alerts.
     const { doctorHospitalId } = req.query;
-
     let query = supabase
       .from('emergency_alerts')
       .select(`
         *,
-        emergency_requests (
-          id, symptoms, patient_location, patient_phone, ambulance_requested, status, created_at,
+        emergency_requests!inner (
+          id,
+          symptoms,
+          patient_location,
+          patient_phone,
+          ambulance_requested,
+          ambulance_status,
+          status,
+          created_at,
           hospitals(name),
           departments(name)
         )
       `)
-      .eq('status', 'sent');
+      .eq('status', 'sent')
+      .eq('emergency_requests.status', 'open')
+      .order('created_at', { ascending: false });
 
     if (doctorHospitalId) {
       query = query.eq('doctor_hospital_id', doctorHospitalId);
@@ -25,9 +31,9 @@ export const getDoctorEmergencyAlerts = async (req, res) => {
     const { data, error } = await query;
     if (error) throw error;
 
-    res.json(data);
+    res.json(data || []);
   } catch (error) {
-    console.error('Get alerts error:', error);
+    console.error('Get doctor emergency alerts error:', error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -35,47 +41,58 @@ export const getDoctorEmergencyAlerts = async (req, res) => {
 export const acceptEmergencyAlert = async (req, res) => {
   try {
     const { requestId } = req.params;
-    const { doctor_hospital_id, doctor_id } = req.body;
+    const { doctor_hospital_id } = req.body;
 
-    if (!doctor_hospital_id || !doctor_id) {
-      return res.status(400).json({ error: 'doctor_hospital_id and doctor_id required' });
+    if (!doctor_hospital_id) {
+      return res.status(400).json({ error: 'doctor_hospital_id is required' });
     }
 
-    // 1. Check if emergency request is still open
-    const { data: request, error: reqErr } = await supabase
-      .from('emergency_requests')
-      .select('status')
-      .eq('id', requestId)
-      .single();
+    const { data: alert, error: alertLookupError } = await supabase
+      .from('emergency_alerts')
+      .select('id, status')
+      .eq('emergency_request_id', requestId)
+      .eq('doctor_hospital_id', doctor_hospital_id)
+      .eq('status', 'sent')
+      .maybeSingle();
 
-    if (reqErr) throw reqErr;
-    if (request.status !== 'open') {
-      return res.status(400).json({ error: 'Request is no longer open (already accepted or closed)' });
+    if (alertLookupError) throw alertLookupError;
+    if (!alert) {
+      return res.status(409).json({ error: 'This alert is no longer open for this doctor' });
     }
 
-    // 2. Update emergency request
-    const { data: updatedReq, error: updateErr } = await supabase
+    const { data: doctorHospital, error: doctorError } = await supabase
+      .from('doctor_hospitals')
+      .select('doctor_id')
+      .eq('id', doctor_hospital_id)
+      .maybeSingle();
+
+    if (doctorError) throw doctorError;
+    if (!doctorHospital) return res.status(400).json({ error: 'Invalid doctor_hospital_id' });
+
+    const { data: updatedRequest, error: updateError } = await supabase
       .from('emergency_requests')
       .update({
         status: 'accepted',
         assigned_doctor_hospital_id: doctor_hospital_id,
-        accepted_by_doctor_id: doctor_id,
-        accepted_at: new Date().toISOString()
+        accepted_by_doctor_id: doctorHospital.doctor_id,
+        accepted_at: new Date().toISOString(),
       })
       .eq('id', requestId)
+      .eq('status', 'open')
       .select()
-      .single();
+      .maybeSingle();
 
-    if (updateErr) throw updateErr;
+    if (updateError) throw updateError;
+    if (!updatedRequest) {
+      return res.status(409).json({ error: 'This emergency request was already accepted or closed' });
+    }
 
-    // 3. Update the specific alert to accepted
     await supabase
       .from('emergency_alerts')
       .update({ status: 'accepted', responded_at: new Date().toISOString() })
       .eq('emergency_request_id', requestId)
       .eq('doctor_hospital_id', doctor_hospital_id);
 
-    // 4. Mark other alerts for this request as expired
     await supabase
       .from('emergency_alerts')
       .update({ status: 'expired', responded_at: new Date().toISOString() })
@@ -83,9 +100,13 @@ export const acceptEmergencyAlert = async (req, res) => {
       .neq('doctor_hospital_id', doctor_hospital_id)
       .eq('status', 'sent');
 
-    res.json({ success: true, message: 'Emergency request accepted', request: updatedReq });
+    res.json({
+      success: true,
+      message: 'Emergency request accepted',
+      request: updatedRequest,
+    });
   } catch (error) {
-    console.error('Accept alert error:', error);
+    console.error('Accept emergency alert error:', error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -96,20 +117,21 @@ export const declineEmergencyAlert = async (req, res) => {
     const { doctor_hospital_id } = req.body;
 
     if (!doctor_hospital_id) {
-      return res.status(400).json({ error: 'doctor_hospital_id required' });
+      return res.status(400).json({ error: 'doctor_hospital_id is required' });
     }
 
     const { error } = await supabase
       .from('emergency_alerts')
       .update({ status: 'declined', responded_at: new Date().toISOString() })
       .eq('emergency_request_id', requestId)
-      .eq('doctor_hospital_id', doctor_hospital_id);
+      .eq('doctor_hospital_id', doctor_hospital_id)
+      .eq('status', 'sent');
 
     if (error) throw error;
 
     res.json({ success: true, message: 'Alert declined' });
   } catch (error) {
-    console.error('Decline alert error:', error);
+    console.error('Decline emergency alert error:', error);
     res.status(500).json({ error: error.message });
   }
 };

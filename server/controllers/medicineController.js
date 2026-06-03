@@ -4,6 +4,66 @@
 
 import supabase from '../config/supabaseClient.js';
 
+const isMissingTableError = (error, tableName) => {
+  const message = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
+  return error?.code === '42P01' || message.includes(tableName.toLowerCase());
+};
+
+const isMissingColumnError = (error) => {
+  const message = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
+  return error?.code === '42703' ||
+    error?.code === 'PGRST204' ||
+    message.includes('column') ||
+    message.includes('schema cache');
+};
+
+const buildLegacyVerification = (code, requestedName) => {
+  const result = {
+    verified: false,
+    finalName: requestedName || `Unknown Batch (${code})`,
+    mfr: 'Unverified / Fake Source',
+    expiry: '—',
+    color: '#fffbeb',
+    icon: '⚠️',
+    status: 'warning',
+    brandName: null,
+    source: 'Legacy fallback rules',
+    dosageForm: null,
+    strength: null
+  };
+
+  if (code.startsWith('MP') || code.startsWith('AT') || code.startsWith('AM') || code === 'PA7788D' || code === 'AM3344X') {
+    result.verified = true;
+    result.color = '#e8f5ee';
+    result.icon = '💊';
+    result.status = 'verified';
+
+    if (code.startsWith('MP')) {
+      result.finalName = 'Metformin 500mg';
+      result.mfr = 'Sun Pharma Ltd';
+      result.expiry = 'Nov 2026';
+    } else if (code.startsWith('AT')) {
+      result.finalName = 'Atorvastatin 20mg';
+      result.mfr = 'Cipla Ltd';
+      result.expiry = 'Aug 2026';
+    } else if (code.startsWith('AM') && code !== 'AM3344X') {
+      result.finalName = 'Amlodipine 5mg';
+      result.mfr = "Dr. Reddy's Laboratories";
+      result.expiry = 'Mar 2027';
+    } else if (code === 'PA7788D') {
+      result.finalName = 'Paracetamol 500mg';
+      result.mfr = 'GSK Consumer Healthcare';
+      result.expiry = 'Dec 2027';
+    } else if (code === 'AM3344X') {
+      result.finalName = 'Amoxicillin 250mg';
+      result.mfr = 'Abbott Laboratories';
+      result.expiry = 'Sep 2026';
+    }
+  }
+
+  return result;
+};
+
 // GET /api/medicines
 export const getMedications = async (req, res) => {
   try {
@@ -55,6 +115,7 @@ export const verifyMedicine = async (req, res) => {
     let source = "Unknown";
     let dosageForm = null;
     let strength = null;
+    let verification = buildLegacyVerification(code, name);
 
     // Database lookup
     const { data: batchMatch, error: lookupError } = await supabase
@@ -74,6 +135,18 @@ export const verifyMedicine = async (req, res) => {
       source = batchMatch.source;
       dosageForm = batchMatch.dosage_form;
       strength = batchMatch.strength;
+      if (!isMissingTableError(lookupError, 'medicine_batches')) {
+        console.warn('[Medicine Verification] Falling back to legacy verification after lookup error:', lookupError.message);
+      }
+    }
+
+    if (!lookupError && batchMatch) {
+      verification.finalName = batchMatch.medicine_name;
+      verification.mfr = batchMatch.manufacturer;
+      verification.brandName = batchMatch.brand_name;
+      verification.source = batchMatch.source;
+      verification.dosageForm = batchMatch.dosage_form;
+      verification.strength = batchMatch.strength;
 
       // Handle Date correctly
       const expDate = new Date(batchMatch.expiry_date);
@@ -95,6 +168,23 @@ export const verifyMedicine = async (req, res) => {
         status = 'verified';
         color = '#e8f5ee'; // Light green
         icon = '✅';
+      verification.expiry = expDate.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+      
+      if (batchMatch.verification_status === 'recalled') {
+        verification.verified = false;
+        verification.status = 'recalled';
+        verification.color = '#fee2e2';
+        verification.icon = '🚨';
+      } else if (expDate < now || batchMatch.verification_status === 'expired') {
+        verification.verified = false;
+        verification.status = 'expired';
+        verification.color = '#ffedd5';
+        verification.icon = '⏳';
+      } else {
+        verification.verified = true;
+        verification.status = 'verified';
+        verification.color = '#e8f5ee';
+        verification.icon = '✅';
       }
     } else {
       status = 'warning';
@@ -103,8 +193,24 @@ export const verifyMedicine = async (req, res) => {
       verified = false;
     }
 
-    // Insert verification scan into database
-    const { data: newVerification, error } = await supabase
+    const baseInsert = {
+      patient_id: patientId,
+      name: verification.finalName,
+      manufacturer: verification.mfr,
+      expiry: verification.expiry,
+      batch: code,
+      verified: verification.verified
+    };
+    const enrichedInsert = {
+      ...baseInsert,
+      status: verification.status,
+      brand_name: verification.brandName,
+      source: verification.source,
+      dosage_form: verification.dosageForm,
+      strength: verification.strength
+    };
+
+    let { data: newVerification, error } = await supabase
       .from('medicine_verifications')
       .insert({
         patient_id: patientId,
@@ -119,8 +225,19 @@ export const verifyMedicine = async (req, res) => {
         dosage_form: dosageForm,
         strength
       })
+      .insert(enrichedInsert)
       .select()
       .single();
+
+    if (error && isMissingColumnError(error)) {
+      const fallbackInsert = await supabase
+        .from('medicine_verifications')
+        .insert(baseInsert)
+        .select()
+        .single();
+      newVerification = fallbackInsert.data;
+      error = fallbackInsert.error;
+    }
 
     if (error) {
       return res.status(500).json({ error: error.message });
@@ -144,6 +261,13 @@ export const verifyMedicine = async (req, res) => {
       source: newVerification.source,
       dosageForm: newVerification.dosage_form,
       strength: newVerification.strength
+      icon: verification.icon,
+      color: verification.color,
+      status: newVerification.status || verification.status,
+      brandName: newVerification.brand_name || verification.brandName,
+      source: newVerification.source || verification.source,
+      dosageForm: newVerification.dosage_form || verification.dosageForm,
+      strength: newVerification.strength || verification.strength
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

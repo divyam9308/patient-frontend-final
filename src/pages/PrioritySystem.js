@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../components/DashboardLayout";
-import { api, submitTriage } from "../utils/api.js";
+import { submitTriage } from "../utils/api.js";
 import './Dashboard.css';
 import "./PrioritySystem.css";
 
@@ -103,6 +103,51 @@ function getSeverityDetails(pct) {
   };
 }
 
+function getSeverityDetailsForResult(result) {
+  if (result === "emergency") {
+    return {
+      label: "Critical",
+      color: "#c0392b",
+      bg: "#fdf1f0",
+      ring: "#e74c3c",
+      icon: "Emergency",
+      appointmentMsg:
+        "Your symptoms look severe. Continue to emergency booking and share only the required logistics.",
+      appointmentLabel: "Book Emergency Appointment",
+      appointmentClass: "btn-critical",
+      waitMsg: "Recommended: Immediate care",
+    };
+  }
+
+  if (result === "priority") {
+    return {
+      label: "Moderate",
+      color: "#d68910",
+      bg: "#fef9ec",
+      ring: "#f39c12",
+      icon: "Priority",
+      appointmentMsg:
+        "Your symptoms need faster attention. Continue to priority appointment booking.",
+      appointmentLabel: "Book Priority Appointment",
+      appointmentClass: "btn-moderate",
+      waitMsg: "Recommended: Same day / within 24 hours",
+    };
+  }
+
+  return {
+    label: "Mild",
+    color: "#1e8449",
+    bg: "#eafaf1",
+    ring: "#27ae60",
+    icon: "Regular",
+    appointmentMsg:
+      "Your symptoms look suitable for a regular appointment based on this triage.",
+    appointmentLabel: "Book Regular Appointment",
+    appointmentClass: "btn-mild",
+    waitMsg: "Recommended: 1-2 days",
+  };
+}
+
 export default function PrioritySystem() {
   const navigate = useNavigate();
 
@@ -115,11 +160,14 @@ export default function PrioritySystem() {
   const [animating, setAnimating] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [triageResult, setTriageResult] = useState(null);
+  const [analysisError, setAnalysisError] = useState("");
 
   const visibleSymptoms = showMore ? ALL_SYMPTOMS : CORE_SYMPTOMS;
 
   const toggleSymptom = (id) => {
     setAnalyzed(false);
+    setTriageResult(null);
+    setAnalysisError("");
     setSelectedSymptoms((prev) =>
       prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
     );
@@ -129,6 +177,8 @@ export default function PrioritySystem() {
     if (selectedSymptoms.length === 0 || !duration) return;
     setLoading(true);
     setAnimating(false);
+    setAnalysisError("");
+    setTriageResult(null);
 
     setTimeout(async () => {
       const baseScore = selectedSymptoms.reduce((acc, id) => {
@@ -146,68 +196,64 @@ export default function PrioritySystem() {
       const raw = baseScore + durationBonus + ageBonus;
       const pct = Math.min(98, Math.round((raw / 150) * 100));
 
-      const severityDetails = getSeverityDetails(pct);
       const symptomLabels = selectedSymptoms.map(id => {
         const s = ALL_SYMPTOMS.find(s => s.id === id);
         return s ? s.label : '';
       }).filter(Boolean);
 
-      // Submit to backend triage API
-      let triageData = null;
       try {
-        triageData = await submitTriage({
-          symptoms: symptomLabels.join(', '),
-          symptomDuration: duration,
+        const result = await submitTriage({
+          symptoms: symptomLabels.join(", "),
+          symptom_duration: duration,
         });
-        setTriageResult(triageData);
-      } catch (err) {
-        console.warn('Triage API call failed, falling back to local classification:', err.message);
-        // Fallback: also save to old priority endpoint
-        try {
-          await api.post('/priority', {
-            symptoms: symptomLabels,
-            severityScore: pct,
-            severityLabel: severityDetails.label,
-          });
-        } catch (e) {
-          console.warn('Priority save also failed:', e.message);
-        }
-      }
 
-      setSeverity(pct);
-      setLoading(false);
-      setAnalyzed(true);
-      setTimeout(() => setAnimating(true), 50);
+        const backendSeverity = result.severity_result || "regular";
+        const adjustedPct =
+          backendSeverity === "emergency" ? Math.max(pct, 85)
+            : backendSeverity === "priority" ? Math.max(45, Math.min(pct, 68))
+              : Math.min(pct, 35);
+
+        setSeverity(adjustedPct);
+        setTriageResult(result);
+        setAnalyzed(true);
+        setTimeout(() => setAnimating(true), 50);
+      } catch (err) {
+        setAnalysisError(err.message || "Unable to save triage. Please try again.");
+      } finally {
+        setLoading(false);
+      }
     }, 1800);
   };
 
-  const details = getSeverityDetails(severity);
+  const details = triageResult
+    ? getSeverityDetailsForResult(triageResult.severity_result)
+    : getSeverityDetails(severity);
 
   const handleBookAppointment = () => {
-    // Use the backend triage result if available
-    if (triageResult) {
-      const { severity_result, triage_id, recommended_department_id } = triageResult;
-
-      if (severity_result === 'emergency') {
-        navigate('/emergency-booking', {
-          state: { triage_id, recommended_department_id }
-        });
-      } else if (severity_result === 'priority') {
-        navigate(`/appointments?mode=priority&triage_id=${triage_id}${recommended_department_id ? `&dept=${recommended_department_id}` : ''}`);
-      } else {
-        navigate(`/appointments?mode=regular&triage_id=${triage_id}${recommended_department_id ? `&dept=${recommended_department_id}` : ''}`);
-      }
+    if (!triageResult?.triage_id) {
+      setAnalysisError("Please analyse your symptoms first.");
       return;
     }
 
-    // Fallback to local severity score if triage API was unavailable
-    if (severity >= 70) {
-      navigate('/emergency-booking');
-    } else if (severity >= 40) {
-      navigate('/appointments?mode=priority');
-    } else {
-      navigate('/appointments?mode=regular');
+    const deptParam = triageResult.recommended_department_id
+      ? `&dept=${triageResult.recommended_department_id}`
+      : "";
+
+    if (triageResult.severity_result === "emergency") {
+      navigate(`/emergency-booking?triage_id=${triageResult.triage_id}${deptParam}`, {
+        state: triageResult,
+      });
+      return;
     }
+
+    const mode = triageResult.severity_result === "priority" ? "priority" : "regular";
+    navigate(`/appointments?mode=${mode}&triage_id=${triageResult.triage_id}${deptParam}`, {
+      state: {
+        mode,
+        triage_id: triageResult.triage_id,
+        recommended_department_id: triageResult.recommended_department_id,
+      },
+    });
   };
 
   return (
@@ -218,6 +264,9 @@ export default function PrioritySystem() {
         <div className="db-page-subtitle" style={{ textAlign: "left", marginBottom: 28 }}>
           AI-powered triage: check your symptoms, get severity score, and prioritize your visit.
         </div>
+        {analysisError && (
+          <div className="ps-error-box">{analysisError}</div>
+        )}
 
         <div className="ps-grid">
           {/* LEFT: Input Panel */}
@@ -251,6 +300,8 @@ export default function PrioritySystem() {
                     onClick={() => {
                       setDuration(opt);
                       setAnalyzed(false);
+                      setTriageResult(null);
+                      setAnalysisError("");
                     }}
                   >
                     {opt}

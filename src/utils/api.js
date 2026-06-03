@@ -1,7 +1,8 @@
 // src/utils/api.js
 // API helper utility to perform fetch requests to the Express backend
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || '/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL ||
+  (process.env.NODE_ENV === 'production' ? '/api' : `http://${window.location.hostname}:5000/api`);
 
 const getHeaders = () => {
   const token = localStorage.getItem('token') || sessionStorage.getItem('token');
@@ -97,7 +98,7 @@ export const getDoctorSchedules = (doctorHospitalId) =>
 export const createAppointment = (payload) => 
   api.post('/appointments', payload);
 
-// ── Triage Helper Functions ──────────────────────────────
+// Triage helper functions
 
 export const submitTriage = (payload) =>
   api.post('/triage', payload);
@@ -105,22 +106,32 @@ export const submitTriage = (payload) =>
 export const getTriageRequest = (triageId) =>
   api.get(`/triage/${triageId}`);
 
-// ── Emergency Helper Functions ───────────────────────────
+// Emergency helper functions
 
 export const createEmergencyRequest = (payload) =>
   api.post('/emergency-requests', payload);
 
-// ── Doctor Alert Helper Functions ────────────────────────
+export const getDelhiEmergencyLocalities = () =>
+  api.get('/emergency-requests/localities');
+
+export const getEmergencyHospitalAvailability = ({ cityId, departmentId, locality }) =>
+  api.get(`/emergency-requests/hospital-availability?cityId=${cityId}&departmentId=${departmentId}&locality=${encodeURIComponent(locality || '')}`);
+
+// Doctor alert helper functions
 
 export const getDoctorEmergencyAlerts = (doctorHospitalId) =>
   api.get(`/doctor/emergency-alerts${doctorHospitalId ? `?doctorHospitalId=${doctorHospitalId}` : ''}`);
 
-export const createAmbulanceRequest = (data) => api.post('/ambulance-requests', data);
+export const acceptEmergencyAlert = (requestId, payload) =>
+  api.post(`/doctor/emergency-alerts/${requestId}/accept`, payload);
 
-export const acceptEmergencyAlert = (requestId, data) => api.post(`/doctor/emergency-alerts/${requestId}/accept`, data);
-export const declineEmergencyAlert = (requestId, data) => api.post(`/doctor/emergency-alerts/${requestId}/decline`, data);
+export const declineEmergencyAlert = (requestId, payload) =>
+  api.post(`/doctor/emergency-alerts/${requestId}/decline`, payload);
 
-// ── Ambulance Helper Functions ───────────────────────────
+// Ambulance helper functions
+
+export const createAmbulanceRequest = (payload) =>
+  api.post('/ambulance-requests', payload);
 
 export const getAmbulanceRequest = (id) =>
   api.get(`/ambulance-requests/${id}`);

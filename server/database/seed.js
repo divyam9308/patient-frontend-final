@@ -21,6 +21,11 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function clearOldData() {
   console.log("Clearing old data...");
+  await supabase.from('ambulance_requests').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  await supabase.from('emergency_alerts').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  await supabase.from('emergency_requests').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  await supabase.from('appointments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  await supabase.from('triage_requests').delete().neq('id', '00000000-0000-0000-0000-000000000000');
   await supabase.from('doctor_schedules').delete().neq('id', '00000000-0000-0000-0000-000000000000');
   await supabase.from('doctor_hospitals').delete().neq('id', '00000000-0000-0000-0000-000000000000');
   await supabase.from('doctors').delete().neq('id', '00000000-0000-0000-0000-000000000000');
@@ -44,7 +49,15 @@ async function seed() {
     console.log("City inserted:", city.name);
 
     // 2. Insert Departments
-    const deptNames = ['General Medicine', 'Cardiology', 'Orthopedics', 'Pediatrics', 'Dermatology'];
+    const deptNames = [
+      'General Medicine',
+      'Cardiology',
+      'Orthopedics',
+      'Pediatrics',
+      'Dermatology',
+      'Neurology',
+      'Emergency Medicine'
+    ];
     const depts = [];
     for (const name of deptNames) {
       const { data, error } = await supabase.from('departments').insert({ name }).select().single();
@@ -53,7 +66,7 @@ async function seed() {
     }
     console.log(`Departments inserted: ${depts.length}`);
 
-    // 3. Insert Hospitals
+    // 3. Insert sample/demo hospitals. Use hospital/OPD numbers only, not private doctor numbers.
     const hospitalData = [
       { name: 'AIIMS New Delhi', address: 'Ansari Nagar, New Delhi', phone: '011-26588500', website: 'https://www.aiims.edu', city_id: city.id },
       { name: 'Safdarjung Hospital', address: 'Ring Road, New Delhi', phone: '011-26165060', website: 'http://vmmc-sjh.nic.in', city_id: city.id },
@@ -68,8 +81,9 @@ async function seed() {
       hospitals.push(data);
     }
     console.log(`Hospitals inserted: ${hospitals.length}`);
+    console.log("Doctor directory seed data is sample/demo data. Verify official OPD details before production use.");
 
-    // 4. Insert Doctors
+    // 4. Insert sample/demo doctors.
     const doctorData = [
       { name: 'Dr. Ramesh Kumar', deptName: 'General Medicine', qualification: 'MBBS, MD (Medicine)', reg: 'DMC-1234' },
       { name: 'Dr. Sunita Sharma', deptName: 'General Medicine', qualification: 'MBBS, DNB (Internal Medicine)', reg: 'DMC-1235' },
@@ -85,7 +99,11 @@ async function seed() {
       { name: 'Dr. Meera Nair', deptName: 'Cardiology', qualification: 'MBBS, DM (Cardiology)', reg: 'DMC-1245' },
       { name: 'Dr. Rajesh Chawla', deptName: 'Orthopedics', qualification: 'MBBS, MS (Ortho)', reg: 'DMC-1246' },
       { name: 'Dr. Swati Jain', deptName: 'Pediatrics', qualification: 'MBBS, MD', reg: 'DMC-1247' },
-      { name: 'Dr. Arjun Reddy', deptName: 'Dermatology', qualification: 'MBBS, MD (Derm)', reg: 'DMC-1248' }
+      { name: 'Dr. Arjun Reddy', deptName: 'Dermatology', qualification: 'MBBS, MD (Derm)', reg: 'DMC-1248' },
+      { name: 'Dr. Nisha Bansal', deptName: 'Neurology', qualification: 'MBBS, DM (Neurology)', reg: 'DMC-1249' },
+      { name: 'Dr. Karan Mehra', deptName: 'Neurology', qualification: 'MBBS, MD, DNB (Neurology)', reg: 'DMC-1250' },
+      { name: 'Dr. Farah Khan', deptName: 'Emergency Medicine', qualification: 'MBBS, MD (Emergency Medicine)', reg: 'DMC-1251' },
+      { name: 'Dr. Abhishek Suri', deptName: 'Emergency Medicine', qualification: 'MBBS, DNB (Emergency Medicine)', reg: 'DMC-1252' }
     ];
 
     const doctors = [];

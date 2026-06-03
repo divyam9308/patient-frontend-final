@@ -18,6 +18,15 @@ import triageRoutes from './routes/triageRoutes.js';
 import emergencyRoutes from './routes/emergencyRoutes.js';
 import ambulanceRoutes from './routes/ambulanceRoutes.js';
 import doctorRoutes from './routes/doctorRoutes.js';
+import { expireOldEmergencyRequests } from './controllers/emergencyController.js';
+import authenticateToken from './middleware/authMiddleware.js';
+import {
+  getCities,
+  getDepartments,
+  getHospitals,
+  getDoctors,
+  getDoctorSchedules,
+} from './controllers/appointmentController.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -29,8 +38,15 @@ console.log('[Backend Startup] SUPABASE_URL:', process.env.SUPABASE_URL);
 console.log('[Backend Startup] JWT_SECRET exists:', !!process.env.JWT_SECRET);
 console.log('[Backend Startup] GOOGLE_CLIENT_ID exists:', !!process.env.GOOGLE_CLIENT_ID);
 
+const requiredEnv = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'JWT_SECRET'];
+const missingEnv = requiredEnv.filter((key) => !process.env[key]);
+if (missingEnv.length > 0) {
+  console.warn(`[Backend Startup] Missing environment variables: ${missingEnv.join(', ')}`);
+}
+
 const app = express();
 const PORT = process.env.PORT || 5000;
+const EMERGENCY_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 
 // ── Middleware ──────────────────────────────────────────
 app.use(cors({ origin: '*' })); // Allow all origins for local network testing
@@ -50,10 +66,17 @@ app.use('/api/medical-records', medicalRecordsRoutes); // MedicalRecords.js
 app.use('/api/medicines', medicineRoutes);    // MedicineVerification.js
 app.use('/api/treatments', treatmentRoutes);  // Treatments.js
 app.use('/api/priority', priorityRoutes);     // PrioritySystem.js
-app.use('/api/triage', triageRoutes);          // Symptom Triage
-app.use('/api/emergency-requests', emergencyRoutes); // Emergency Requests
-app.use('/api/ambulance-requests', ambulanceRoutes); // Ambulance Requests
-app.use('/api/doctor', doctorRoutes);          // Doctor Emergency Alerts
+app.use('/api/triage', triageRoutes);         // Symptom triage
+app.use('/api/emergency-requests', emergencyRoutes);
+app.use('/api/ambulance-requests', ambulanceRoutes);
+app.use('/api/doctor', doctorRoutes);
+
+// Top-level directory aliases used by the appointment flow.
+app.get('/api/cities', authenticateToken, getCities);
+app.get('/api/departments', authenticateToken, getDepartments);
+app.get('/api/hospitals', authenticateToken, getHospitals);
+app.get('/api/doctors', authenticateToken, getDoctors);
+app.get('/api/doctors/:doctorHospitalId/schedules', authenticateToken, getDoctorSchedules);
 
 // ── Health Check ────────────────────────────────────────
 app.get('/health', (req, res) => {
@@ -66,6 +89,11 @@ if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+}
+
+if (process.env.NODE_ENV !== 'test') {
+  expireOldEmergencyRequests();
+  setInterval(expireOldEmergencyRequests, EMERGENCY_CLEANUP_INTERVAL_MS);
 }
 
 // Export the Express API for Vercel's serverless function

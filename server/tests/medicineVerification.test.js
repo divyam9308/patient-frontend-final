@@ -57,8 +57,8 @@ async function runAll() {
   console.log('Running Medicine Verification API Tests...');
   console.log('Note: Ensure your server is running on localhost:5000 and the database is seeded.\n');
   
-  // Also need an authenticated request but the backend might not require auth token in test mode or we need to bypass?
-  // Wait, looking at the code `verifyMedicine` uses `req.user.id`. Let's check `routes/medicineRoutes.js` if it's protected.
+  // Also need an authenticated  but the backend might not require auth token in test mode or we need to bypass?
+  // Wait, looking at the code `verifyMedicirequestne` uses `req.user.id`. Let's check `routes/medicineRoutes.js` if it's protected.
 }
 
 runAll();

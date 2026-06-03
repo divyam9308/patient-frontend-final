@@ -1,68 +1,115 @@
 import supabase from '../config/supabaseClient.js';
 
+const EMERGENCY_KEYWORDS = [
+  'chest pain',
+  'difficulty breathing',
+  'unconscious',
+  'loss of consciousness',
+  'severe bleeding',
+  'bleeding that won',
+  'stroke',
+  'seizure',
+  'convulsion',
+  'poisoning',
+  'major accident',
+  'severe head injury',
+  'sudden severe chest tightness',
+];
+
+const PRIORITY_KEYWORDS = [
+  'high fever',
+  'severe pain',
+  'infection',
+  'pregnancy pain',
+  'worsening symptoms',
+  'dehydration',
+  'uncontrolled vomiting',
+  'asthma',
+  'fracture',
+  'severe swelling',
+];
+
+function inferDepartment(symptoms) {
+  if (symptoms.includes('chest pain') || symptoms.includes('heart') || symptoms.includes('heartbeat')) {
+    return 'Cardiology';
+  }
+  if (symptoms.includes('breathing') || symptoms.includes('asthma') || symptoms.includes('cough')) {
+    return 'General Medicine';
+  }
+  if (symptoms.includes('fracture') || symptoms.includes('injury') || symptoms.includes('accident') || symptoms.includes('joint')) {
+    return 'Orthopedics';
+  }
+  if (symptoms.includes('child') || symptoms.includes('pediatric')) {
+    return 'Pediatrics';
+  }
+  if (symptoms.includes('skin') || symptoms.includes('rash') || symptoms.includes('allergic')) {
+    return 'Dermatology';
+  }
+  if (symptoms.includes('seizure') || symptoms.includes('stroke') || symptoms.includes('head injury') || symptoms.includes('numbness')) {
+    return 'Neurology';
+  }
+  return 'General Medicine';
+}
+
 export const submitTriage = async (req, res) => {
   try {
-    const { symptoms, symptomDuration, patientId = null } = req.body;
+    const {
+      symptoms,
+      symptom_duration,
+      symptomDuration,
+      recommended_city_id,
+    } = req.body;
 
     if (!symptoms) {
       return res.status(400).json({ error: 'Symptoms are required' });
     }
 
-    const s = symptoms.toLowerCase();
-    let severity = 'regular';
+    const symptomText = Array.isArray(symptoms) ? symptoms.join(', ') : String(symptoms);
+    const normalized = symptomText.toLowerCase();
+    const severity = EMERGENCY_KEYWORDS.some(keyword => normalized.includes(keyword))
+      ? 'emergency'
+      : PRIORITY_KEYWORDS.some(keyword => normalized.includes(keyword))
+        ? 'priority'
+        : 'regular';
 
-    // Emergency check
-    const emergencyKeywords = ['chest pain', 'difficulty breathing', 'unconscious', 'severe bleeding', 'stroke', 'seizure', 'poisoning', 'major accident', 'severe head injury'];
-    // Priority check
-    const priorityKeywords = ['high fever', 'severe pain', 'infection', 'pregnancy pain', 'worsening symptoms', 'dehydration', 'uncontrolled vomiting', 'asthma', 'fracture'];
+    const departmentName = inferDepartment(normalized);
+    const { data: department } = await supabase
+      .from('departments')
+      .select('id, name')
+      .eq('name', departmentName)
+      .maybeSingle();
 
-    if (emergencyKeywords.some(kw => s.includes(kw))) {
-      severity = 'emergency';
-    } else if (priorityKeywords.some(kw => s.includes(kw))) {
-      severity = 'priority';
-    }
-
-    // Infer department
-    let recommendedDepartmentName = null;
-    if (s.includes('chest pain')) recommendedDepartmentName = 'Cardiology';
-    else if (s.includes('breathing') || s.includes('asthma')) recommendedDepartmentName = 'General Medicine'; // Or Emergency Medicine
-    else if (s.includes('fracture') || s.includes('severe injury') || s.includes('accident')) recommendedDepartmentName = 'Orthopedics';
-    else if (s.includes('child') || s.includes('pediatric')) recommendedDepartmentName = 'Pediatrics';
-    else if (s.includes('skin') || s.includes('rash')) recommendedDepartmentName = 'Dermatology';
-    else if (s.includes('seizure') || s.includes('stroke') || s.includes('head injury')) recommendedDepartmentName = 'Neurology';
-
-    let departmentId = null;
-    if (recommendedDepartmentName) {
-      const { data: deptData } = await supabase
-        .from('departments')
-        .select('id')
-        .eq('name', recommendedDepartmentName)
-        .single();
-      
-      if (deptData) {
-        departmentId = deptData.id;
-      }
-    }
-
-    const { data: triageReq, error } = await supabase
+    const { data, error } = await supabase
       .from('triage_requests')
-      .insert([{
-        patient_id: patientId,
-        symptoms,
-        symptom_duration: symptomDuration,
+      .insert({
+        patient_id: req.user?.id || null,
+        symptoms: symptomText,
+        symptom_duration: symptom_duration || symptomDuration || null,
         severity_result: severity,
-        recommended_department_id: departmentId
-      }])
-      .select()
+        recommended_department_id: department?.id || null,
+        recommended_city_id: recommended_city_id || null,
+      })
+      .select(`
+        id,
+        symptoms,
+        symptom_duration,
+        severity_result,
+        recommended_department_id,
+        recommended_city_id,
+        created_at
+      `)
       .single();
 
     if (error) throw error;
 
     res.status(201).json({
       success: true,
-      triage_id: triageReq.id,
-      severity_result: triageReq.severity_result,
-      recommended_department_id: triageReq.recommended_department_id
+      triage_id: data.id,
+      severity_result: data.severity_result,
+      recommended_department_id: data.recommended_department_id,
+      recommended_city_id: data.recommended_city_id,
+      symptoms: data.symptoms,
+      symptom_duration: data.symptom_duration,
     });
   } catch (error) {
     console.error('Submit triage error:', error);
@@ -77,10 +124,11 @@ export const getTriageRequest = async (req, res) => {
       .from('triage_requests')
       .select(`
         *,
-        recommended_department:departments(name)
+        recommended_department:departments(id, name),
+        recommended_city:cities(id, name)
       `)
       .eq('id', id)
-      .single();
+      .maybeSingle();
 
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Triage request not found' });

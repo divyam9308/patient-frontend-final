@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import DashboardLayout from "../components/DashboardLayout";
 import {
   api,
@@ -8,7 +8,8 @@ import {
   getHospitalsByCityAndDepartment,
   getDoctorsByHospitalAndDepartment,
   getDoctorSchedules,
-  createAppointment
+  createAppointment,
+  getTriageRequest,
 } from "../utils/api.js";
 import "./Dashboard.css";
 import "./Appointment.css";
@@ -20,6 +21,34 @@ const STATUS_STYLES = {
   missed: { label: "Missed", color: "#b45309", bg: "#fffbeb", border: "#fde68a" },
 };
 
+const BOOKING_COPY = {
+  follow_up: {
+    title: "Book Follow-up Appointment",
+    subtitle: "Choose a city, department, hospital, doctor, date, and time.",
+    note: "Recommended: book follow-up visits more than 7 days from today when possible.",
+    badge: "Follow-up",
+  },
+  regular: {
+    title: "Book Regular Appointment",
+    subtitle: "This booking started from your symptom triage.",
+    note: "Recommended: regular visits are usually best scheduled 1-2 days from now.",
+    badge: "Regular",
+  },
+  priority: {
+    title: "Book Priority Appointment",
+    subtitle: "This booking started from your symptom triage.",
+    note: "Recommended: priority visits are usually best scheduled today or within 24 hours.",
+    badge: "Priority",
+  },
+};
+
+const TYPE_BADGES = {
+  follow_up: { label: "FOLLOW-UP", bg: "#eaf4ec", color: "#2d6a3f", border: "#c8e6c9" },
+  regular: { label: "REGULAR", bg: "#eff6ff", color: "#1d4ed8", border: "#bfdbfe" },
+  priority: { label: "PRIORITY", bg: "#fffbeb", color: "#b45309", border: "#fde68a" },
+  emergency: { label: "EMERGENCY", bg: "#fef2f2", color: "#dc2626", border: "#fecaca" },
+};
+
 function fmtSlot(slot) {
   const [h, m] = slot.split(":").map(Number);
   const ampm = h >= 12 ? "PM" : "AM";
@@ -28,122 +57,187 @@ function fmtSlot(slot) {
 }
 
 function todayStr() {
-  const d = new Date();
-  return d.toISOString().split("T")[0];
+  return new Date().toISOString().split("T")[0];
+}
+
+function cleanMode(mode) {
+  return ["regular", "priority"].includes(mode) ? mode : "follow_up";
 }
 
 export default function Appointment() {
+  const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
 
-  // ── Booking Mode from URL ───────────────────────────────
-  const urlMode = searchParams.get('mode'); // 'regular', 'priority', or null (follow_up)
-  const urlTriageId = searchParams.get('triage_id');
-  const urlDeptId = searchParams.get('dept');
-  const bookingMode = urlMode || 'follow_up'; // Default to follow_up
+  const incomingMode = cleanMode(location.state?.mode || searchParams.get("mode"));
+  const incomingTriageId = location.state?.triage_id || searchParams.get("triage_id") || "";
+  const incomingDeptId = location.state?.recommended_department_id || searchParams.get("dept") || "";
 
-  // ── List state ──────────────────────────────────────────
   const [filter, setFilter] = useState("all");
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState(null);
 
-  // ── Modal state ─────────────────────────────────────────
   const [showBooking, setShowBooking] = useState(false);
+  const [bookingMode, setBookingMode] = useState("follow_up");
+  const [activeTriageId, setActiveTriageId] = useState("");
+  const [triage, setTriage] = useState(null);
   const [booking, setBooking] = useState(false);
   const [bookError, setBookError] = useState("");
 
-  // ── Dependent Dropdown Options ──────────────────────────
   const [cities, setCities] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [hospitals, setHospitals] = useState([]);
   const [doctors, setDoctors] = useState([]);
   const [schedules, setSchedules] = useState([]);
 
-  // ── Selection State ─────────────────────────────────────
   const [selectedCity, setSelectedCity] = useState("");
   const [selectedDept, setSelectedDept] = useState("");
   const [selectedHospital, setSelectedHospital] = useState("");
   const [selectedDoctorId, setSelectedDoctorId] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
+  const [reason, setReason] = useState("");
+  const [preferredDeptId, setPreferredDeptId] = useState("");
 
-  // ── Loading States ──────────────────────────────────────
   const [loadingOptions, setLoadingOptions] = useState({
-    cities: false, depts: false, hospitals: false, doctors: false, schedules: false
+    cities: false,
+    depts: false,
+    hospitals: false,
+    doctors: false,
+    schedules: false,
   });
 
-  // ── Date constraints based on booking mode ──────────────
-  const dateMin = useMemo(() => {
-    const d = new Date();
-    if (bookingMode === 'follow_up') {
-      d.setDate(d.getDate() + 8); // > 7 days from now
-    } else if (bookingMode === 'regular') {
-      d.setDate(d.getDate() + 1); // at least 1 day from now (advised, not blocked)
-    }
-    // priority: same day allowed
-    return d.toISOString().split('T')[0];
-  }, [bookingMode]);
-
-  const modeLabel = bookingMode === 'follow_up' ? 'Follow-Up'
-    : bookingMode === 'priority' ? 'Priority'
-      : bookingMode === 'regular' ? 'Regular' : 'Follow-Up';
-
   const selectedDoctor = doctors.find(d => d.doctor_hospital_id === selectedDoctorId);
+  const bookingCopy = BOOKING_COPY[bookingMode] || BOOKING_COPY.follow_up;
 
-  // ── Fetch appointments list ─────────────────────────────
-  const fetchAppointments = useCallback(() => {
+  const fetchAppointments = useCallback(async () => {
     setLoading(true);
-    api.get("/appointments")
-      .then(data => setAppointments(data))
-      .catch(() => { })
-      .finally(() => setLoading(false));
+    try {
+      const data = await api.get("/appointments");
+      setAppointments(Array.isArray(data) ? data : []);
+    } catch {
+      setAppointments([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadCities = useCallback(async () => {
+    setLoadingOptions(p => ({ ...p, cities: true }));
+    try {
+      const data = await getCities();
+      setCities(Array.isArray(data) ? data : []);
+      if (data?.length === 1) {
+        setSelectedCity(prev => prev || data[0].id);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingOptions(p => ({ ...p, cities: false }));
+    }
   }, []);
 
   useEffect(() => {
     fetchAppointments();
-    setLoadingOptions(p => ({ ...p, cities: true }));
-    getCities().then(setCities).catch(console.error).finally(() => setLoadingOptions(p => ({ ...p, cities: false })));
-  }, [fetchAppointments]);
+    loadCities();
+  }, [fetchAppointments, loadCities]);
 
-  // Auto-open modal if coming from triage redirect (mode in URL)
   useEffect(() => {
-    if (urlMode === 'regular' || urlMode === 'priority') {
-      setShowBooking(true);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
-  }, [urlMode]);
+    if (incomingMode === "follow_up") return;
 
-  // ── Cascading Fetch Logic ────────────────────────────────
+    setSelectedCity(cities.length === 1 ? cities[0].id : "");
+    setSelectedDept("");
+    setSelectedHospital("");
+    setSelectedDoctorId("");
+    setSelectedDate("");
+    setSelectedTime("");
+    setReason("");
+    setBookError("");
+    setBookingMode(incomingMode);
+    setActiveTriageId(incomingTriageId);
+    setPreferredDeptId(incomingDeptId);
+    setShowBooking(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    if (!incomingTriageId) {
+      setBookError("A triage request is required for regular and priority booking.");
+      return;
+    }
+
+    getTriageRequest(incomingTriageId)
+      .then(data => {
+        if (data.severity_result === "emergency") {
+          navigate(`/emergency-booking?triage_id=${incomingTriageId}`, { replace: true });
+          return;
+        }
+
+        const modeFromTriage = data.severity_result === "priority" ? "priority" : "regular";
+        setBookingMode(modeFromTriage);
+        setTriage(data);
+        setActiveTriageId(data.id);
+        if (data.recommended_city_id) setSelectedCity(data.recommended_city_id);
+        if (data.recommended_department_id) setPreferredDeptId(data.recommended_department_id);
+      })
+      .catch(err => setBookError(err.message || "Unable to load triage request"));
+  }, [cities, incomingDeptId, incomingMode, incomingTriageId, navigate]);
+
   useEffect(() => {
     setSelectedDept("");
+    setSelectedHospital("");
+    setSelectedDoctorId("");
+    setSelectedDate("");
+    setSelectedTime("");
     setDepartments([]);
+    setHospitals([]);
+    setDoctors([]);
+    setSchedules([]);
+
     if (!selectedCity) return;
+
     setLoadingOptions(p => ({ ...p, depts: true }));
     getDepartmentsByCity(selectedCity)
-      .then(setDepartments)
+      .then(data => {
+        const list = Array.isArray(data) ? data : [];
+        setDepartments(list);
+        if (preferredDeptId && list.some(d => d.id === preferredDeptId)) {
+          setSelectedDept(preferredDeptId);
+        }
+      })
       .catch(console.error)
       .finally(() => setLoadingOptions(p => ({ ...p, depts: false })));
-  }, [selectedCity]);
+  }, [selectedCity, preferredDeptId]);
 
   useEffect(() => {
     setSelectedHospital("");
+    setSelectedDoctorId("");
+    setSelectedDate("");
+    setSelectedTime("");
     setHospitals([]);
+    setDoctors([]);
+    setSchedules([]);
+
     if (!selectedCity || !selectedDept) return;
+
     setLoadingOptions(p => ({ ...p, hospitals: true }));
     getHospitalsByCityAndDepartment(selectedCity, selectedDept)
-      .then(setHospitals)
+      .then(data => setHospitals(Array.isArray(data) ? data : []))
       .catch(console.error)
       .finally(() => setLoadingOptions(p => ({ ...p, hospitals: false })));
   }, [selectedDept, selectedCity]);
 
   useEffect(() => {
     setSelectedDoctorId("");
+    setSelectedDate("");
+    setSelectedTime("");
     setDoctors([]);
+    setSchedules([]);
+
     if (!selectedHospital || !selectedDept) return;
+
     setLoadingOptions(p => ({ ...p, doctors: true }));
     getDoctorsByHospitalAndDepartment(selectedHospital, selectedDept)
-      .then(setDoctors)
+      .then(data => setDoctors(Array.isArray(data) ? data : []))
       .catch(console.error)
       .finally(() => setLoadingOptions(p => ({ ...p, doctors: false })));
   }, [selectedHospital, selectedDept]);
@@ -152,46 +246,48 @@ export default function Appointment() {
     setSelectedDate("");
     setSelectedTime("");
     setSchedules([]);
+
     if (!selectedDoctorId) return;
+
     setLoadingOptions(p => ({ ...p, schedules: true }));
     getDoctorSchedules(selectedDoctorId)
-      .then(setSchedules)
+      .then(data => setSchedules(Array.isArray(data) ? data : []))
       .catch(console.error)
       .finally(() => setLoadingOptions(p => ({ ...p, schedules: false })));
   }, [selectedDoctorId]);
 
-  // ── Slot Generation ──────────────────────────────────────
-  const availableSlots = React.useMemo(() => {
+  const availableSlots = useMemo(() => {
     if (!selectedDate || !schedules.length) return [];
 
-    const dayOfWeek = new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long' });
+    const dayOfWeek = new Date(`${selectedDate}T00:00:00`).toLocaleDateString("en-US", { weekday: "long" });
     const daySchedules = schedules.filter(s => s.day_of_week === dayOfWeek);
-
-    if (!daySchedules.length) return [];
-
     const slots = [];
-    daySchedules.forEach(sched => {
-      let current = new Date(`${selectedDate}T${sched.start_time}`);
-      const end = new Date(`${selectedDate}T${sched.end_time}`);
+
+    daySchedules.forEach(schedule => {
+      const startTime = String(schedule.start_time).substring(0, 8);
+      const endTime = String(schedule.end_time).substring(0, 8);
+      const current = new Date(`${selectedDate}T${startTime}`);
+      const end = new Date(`${selectedDate}T${endTime}`);
 
       while (current < end) {
-        slots.push(current.toTimeString().substring(0, 5) + ':00');
+        slots.push(current.toTimeString().substring(0, 5) + ":00");
         current.setMinutes(current.getMinutes() + 30);
       }
     });
 
     if (selectedDate === todayStr()) {
       const nowStr = new Date().toTimeString().substring(0, 8);
-      return slots.filter(s => s > nowStr).sort();
+      return slots.filter(slot => slot > nowStr).sort();
     }
 
     return slots.sort();
   }, [selectedDate, schedules]);
 
-
-  // ── Actions ─────────────────────────────────────────────
-  const openModal = () => {
+  const openFollowUpModal = () => {
     resetForm();
+    setBookingMode("follow_up");
+    setActiveTriageId("");
+    setTriage(null);
     setShowBooking(true);
   };
 
@@ -200,15 +296,17 @@ export default function Appointment() {
     resetForm();
   };
 
-  const resetForm = () => {
-    setSelectedCity("");
+  function resetForm() {
+    setSelectedCity(cities.length === 1 ? cities[0].id : "");
     setSelectedDept("");
     setSelectedHospital("");
     setSelectedDoctorId("");
     setSelectedDate("");
     setSelectedTime("");
+    setReason("");
     setBookError("");
-  };
+    setPreferredDeptId("");
+  }
 
   const handleCancel = async (id) => {
     if (!window.confirm("Are you sure you want to cancel this appointment?")) return;
@@ -236,23 +334,27 @@ export default function Appointment() {
     e.preventDefault();
     setBookError("");
 
-    if (!selectedDoctorId || !selectedDate || !selectedTime) {
-      setBookError("Please select doctor, date, and time.");
+    if (!selectedCity || !selectedDept || !selectedHospital || !selectedDoctorId || !selectedDate || !selectedTime) {
+      setBookError("Please complete city, department, hospital, doctor, date, and time.");
+      return;
+    }
+
+    if ((bookingMode === "regular" || bookingMode === "priority") && !activeTriageId) {
+      setBookError("This booking mode needs a completed symptom triage first.");
       return;
     }
 
     setBooking(true);
     try {
-      const payload = {
+      await createAppointment({
         doctor_hospital_id: selectedDoctorId,
         appointment_date: selectedDate,
         appointment_time: selectedTime,
         appointment_type: bookingMode,
-      };
-      if (urlTriageId) payload.triage_id = urlTriageId;
-
-      const newAppt = await createAppointment(payload);
-      setAppointments(prev => [...prev, newAppt].sort((a, b) => new Date(a.appointment_date) - new Date(b.appointment_date)));
+        triage_id: activeTriageId || null,
+        reason: reason || triage?.symptoms || null,
+      });
+      await fetchAppointments();
       closeModal();
     } catch (err) {
       setBookError(err.message || "Failed to book appointment");
@@ -273,227 +375,215 @@ export default function Appointment() {
       <div className="db-page-title">Appointments</div>
       <div className="db-page-subtitle">Your upcoming and past appointments</div>
 
-      {/* Mode banner */}
-      {urlMode && (
-        <div style={{
-          background: bookingMode === 'priority' ? '#fffbeb' : '#eff6ff',
-          border: `1.5px solid ${bookingMode === 'priority' ? '#fde68a' : '#bfdbfe'}`,
-          borderRadius: 12, padding: '12px 18px', marginBottom: 16,
-          fontSize: 14, fontWeight: 600,
-          color: bookingMode === 'priority' ? '#92400e' : '#1d4ed8'
-        }}>
-          {bookingMode === 'priority'
-            ? '⚡ Priority Booking — Based on your triage results, you can book a same-day or within-24-hour appointment.'
-            : '📋 Regular Booking — Based on your triage results, we recommend booking within 1-2 days.'}
-        </div>
-      )}
-
-      {/* Action buttons */}
       <div style={{ display: "flex", gap: 12, marginBottom: 28, flexWrap: "wrap", justifyContent: "space-between" }}>
-        <button className="db-new-appt-btn" onClick={() => openModal()} style={{ margin: 0 }}>
-          + Book Follow Up Appointment
+        <button className="db-new-appt-btn" onClick={openFollowUpModal} style={{ margin: 0 }}>
+          + Book Follow-up Appointment
         </button>
-        <button className="appt-emergency-trigger-btn" onClick={() => window.location.href = '/symptom-analyser'} style={{ margin: 0 }}>
-          🩺 Symptom Check / Triage
+        <button className="appt-triage-trigger-btn" onClick={() => navigate("/priority-system")} style={{ margin: 0 }}>
+          Symptom Check for Regular/Priority/Emergency
         </button>
       </div>
 
-      {/* ── BOOKING MODAL ──────────────────────────────────────────────────────── */}
       {showBooking && (
         <div className="appt-modal-overlay" onClick={e => e.target === e.currentTarget && closeModal()}>
           <div className="appt-modal">
+            <div className="appt-modal-header">{bookingCopy.title}</div>
+            <div className="appt-modal-sub">{bookingCopy.subtitle}</div>
 
-            {/* Header */}
-            <div className="appt-modal-header">
-              📅 Book {modeLabel} Appointment
-            </div>
-            <div className="appt-modal-sub">
-              {bookingMode === 'priority'
-                ? 'Priority booking — same-day or within 24 hours. Select a doctor and available slot.'
-                : bookingMode === 'regular'
-                  ? 'Regular booking — we advise scheduling within 1-2 days.'
-                  : 'Follow-up booking — must be at least 7 days from today.'}
-            </div>
+            <div className="appt-recommendation-note">{bookingCopy.note}</div>
 
-            {/* Error */}
-            {bookError && (
-              <div className="appt-error-box">⚠️ {bookError}</div>
+            {triage && bookingMode !== "follow_up" && (
+              <div className="appt-triage-summary">
+                <div className="appt-triage-title">Triage summary</div>
+                <div className="appt-triage-text">{triage.symptoms}</div>
+                {triage.symptom_duration && (
+                  <div className="appt-triage-meta">Duration: {triage.symptom_duration}</div>
+                )}
+              </div>
             )}
 
-            <form onSubmit={handleBook} className="appt-form">
+            {bookError && <div className="appt-error-box">{bookError}</div>}
 
-              {/* ── STEPPED FORM ─────────────────────────────────────── */}
-              <>
-                {/* Step 1: City */}
+            <form onSubmit={handleBook} className="appt-form">
+              <div className="appt-step">
+                <div className="appt-step-num">1</div>
+                <div className="appt-step-body">
+                  <label className="appt-label">Select City</label>
+                  <select
+                    className="appt-select"
+                    value={selectedCity}
+                    onChange={e => {
+                      setPreferredDeptId("");
+                      setSelectedCity(e.target.value);
+                    }}
+                    required
+                  >
+                    <option value="">{loadingOptions.cities ? "Loading cities..." : "Choose a city"}</option>
+                    {cities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {selectedCity && (
                 <div className="appt-step">
-                  <div className="appt-step-num">1</div>
+                  <div className="appt-step-num">2</div>
                   <div className="appt-step-body">
-                    <label className="appt-label">Select City</label>
+                    <label className="appt-label">Select Department</label>
                     <select
                       className="appt-select"
-                      value={selectedCity}
-                      onChange={e => setSelectedCity(e.target.value)}
+                      value={selectedDept}
+                      onChange={e => setSelectedDept(e.target.value)}
                       required
                     >
-                      <option value="">{loadingOptions.cities ? "Loading cities..." : "— Choose a city —"}</option>
-                      {cities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      <option value="">{loadingOptions.depts ? "Loading departments..." : "Choose department"}</option>
+                      {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
                   </div>
                 </div>
+              )}
 
-                {/* Step 2: Department */}
-                {selectedCity && (
-                  <div className="appt-step">
-                    <div className="appt-step-num">2</div>
-                    <div className="appt-step-body">
-                      <label className="appt-label">Select Specialty / Department</label>
-                      <select
-                        className="appt-select"
-                        value={selectedDept}
-                        onChange={e => setSelectedDept(e.target.value)}
-                        required
-                      >
-                        <option value="">{loadingOptions.depts ? "Loading departments..." : "— Choose specialty —"}</option>
-                        {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                      </select>
-                    </div>
+              {selectedDept && (
+                <div className="appt-step">
+                  <div className="appt-step-num">3</div>
+                  <div className="appt-step-body">
+                    <label className="appt-label">Select Hospital</label>
+                    <select
+                      className="appt-select"
+                      value={selectedHospital}
+                      onChange={e => setSelectedHospital(e.target.value)}
+                      required
+                    >
+                      <option value="">{loadingOptions.hospitals ? "Loading hospitals..." : "Choose a hospital"}</option>
+                      {hospitals.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+                    </select>
                   </div>
-                )}
-
-                {/* Step 3: Hospital */}
-                {selectedDept && (
-                  <div className="appt-step">
-                    <div className="appt-step-num">3</div>
-                    <div className="appt-step-body">
-                      <label className="appt-label">Select Hospital</label>
-                      <select
-                        className="appt-select"
-                        value={selectedHospital}
-                        onChange={e => setSelectedHospital(e.target.value)}
-                        required
-                      >
-                        <option value="">{loadingOptions.hospitals ? "Loading hospitals..." : "— Choose a hospital —"}</option>
-                        {hospitals.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                )}
-
-                {/* Step 4: Doctor */}
-                {selectedHospital && (
-                  <div className="appt-step">
-                    <div className="appt-step-num">4</div>
-                    <div className="appt-step-body">
-                      <label className="appt-label">Select Doctor</label>
-                      <select
-                        className="appt-select"
-                        value={selectedDoctorId}
-                        onChange={e => setSelectedDoctorId(e.target.value)}
-                        required
-                      >
-                        <option value="">{loadingOptions.doctors ? "Loading doctors..." : "— Choose a doctor —"}</option>
-                        {doctors.map(d => <option key={d.doctor_hospital_id} value={d.doctor_hospital_id}>{d.name} ({d.qualification})</option>)}
-                      </select>
-
-                      {/* Doctor Details Card inside the step */}
-                      {selectedDoctor && (
-                        <div style={{ marginTop: '12px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px', color: '#475569' }}>
-                          <div style={{ fontWeight: 600, color: '#1e293b', marginBottom: '6px' }}>🩺 {selectedDoctor.name}</div>
-                          <div style={{ marginBottom: '4px' }}><strong>Room:</strong> {selectedDoctor.room_number}</div>
-                          <div style={{ marginBottom: '4px' }}><strong>Phone:</strong> {selectedDoctor.hospital_phone}</div>
-                          <div style={{ marginBottom: '4px' }}><strong>Fee:</strong> ₹{selectedDoctor.consultation_fee}</div>
-                          {selectedDoctor.source_url && (
-                            <div><strong>Source:</strong> <a href={selectedDoctor.source_url} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>Verify Schedule</a></div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Step 5: Date */}
-                {selectedDoctorId && (
-                  <div className="appt-step">
-                    <div className="appt-step-num">5</div>
-                    <div className="appt-step-body">
-                      <label className="appt-label">Select Date</label>
-                      <input
-                        type="date"
-                        className="appt-input"
-                        value={selectedDate}
-                        min={dateMin}
-                        onChange={e => setSelectedDate(e.target.value)}
-                        required
-                        style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #c2d1c7', outline: 'none' }}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Step 6: Slot */}
-                {selectedDate && (
-                  <div className="appt-step">
-                    <div className="appt-step-num">6</div>
-                    <div className="appt-step-body">
-                      <label className="appt-label">Select Available Slot</label>
-
-                      {loadingOptions.schedules && (
-                        <div className="appt-slots-loading">⏳ Loading availability...</div>
-                      )}
-
-                      {!loadingOptions.schedules && availableSlots.length === 0 && (
-                        <div className="appt-slots-empty">
-                          😞 No slots available for this doctor on the selected date.
-                          Try another date or doctor.
-                        </div>
-                      )}
-
-                      {!loadingOptions.schedules && availableSlots.length > 0 && (
-                        <div className="appt-slots-grid">
-                          {availableSlots.map(s => (
-                            <button
-                              key={s}
-                              type="button"
-                              className={`appt-slot-btn ${selectedTime === s ? "appt-slot-active" : ""}`}
-                              onClick={() => setSelectedTime(s)}
-                            >
-                              {fmtSlot(s)}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="appt-form-actions">
-                  <button type="button" className="appt-cancel-btn" onClick={closeModal}>
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="appt-submit-btn"
-                    disabled={booking || !selectedTime}
-                  >
-                    {booking ? "Booking..." : "Confirm Booking"}
-                  </button>
                 </div>
-              </>
+              )}
+
+              {selectedHospital && (
+                <div className="appt-step">
+                  <div className="appt-step-num">4</div>
+                  <div className="appt-step-body">
+                    <label className="appt-label">Select Doctor</label>
+                    <select
+                      className="appt-select"
+                      value={selectedDoctorId}
+                      onChange={e => setSelectedDoctorId(e.target.value)}
+                      required
+                    >
+                      <option value="">{loadingOptions.doctors ? "Loading doctors..." : "Choose a doctor"}</option>
+                      {doctors.map(d => (
+                        <option key={d.doctor_hospital_id} value={d.doctor_hospital_id}>
+                          {d.name}{d.qualification ? ` (${d.qualification})` : ""}
+                        </option>
+                      ))}
+                    </select>
+
+                    {selectedDoctor && (
+                      <div className="appt-doctor-card">
+                        <div className="appt-doctor-name">{selectedDoctor.name}</div>
+                        <div><strong>Qualification:</strong> {selectedDoctor.qualification || "Not listed"}</div>
+                        <div><strong>Department:</strong> {selectedDoctor.department_name || departments.find(d => d.id === selectedDept)?.name || "Department"}</div>
+                        <div><strong>Hospital:</strong> {selectedDoctor.hospital_name || hospitals.find(h => h.id === selectedHospital)?.name || "Hospital"}</div>
+                        <div><strong>Room:</strong> {selectedDoctor.room_number || "Not listed"}</div>
+                        <div><strong>Hospital phone:</strong> {selectedDoctor.hospital_phone || "Not listed"}</div>
+                        {selectedDoctor.consultation_fee && <div><strong>Fee:</strong> Rs {selectedDoctor.consultation_fee}</div>}
+                        {selectedDoctor.last_verified_at && (
+                          <div><strong>Last verified:</strong> {new Date(selectedDoctor.last_verified_at).toLocaleDateString()}</div>
+                        )}
+                        {selectedDoctor.source_url && (
+                          <div><strong>Source:</strong> <a href={selectedDoctor.source_url} target="_blank" rel="noreferrer">Verify details</a></div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {selectedDoctorId && (
+                <div className="appt-step">
+                  <div className="appt-step-num">5</div>
+                  <div className="appt-step-body">
+                    <label className="appt-label">Select Date</label>
+                    <input
+                      type="date"
+                      className="appt-input"
+                      value={selectedDate}
+                      min={todayStr()}
+                      onChange={e => setSelectedDate(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+
+              {selectedDate && (
+                <div className="appt-step">
+                  <div className="appt-step-num">6</div>
+                  <div className="appt-step-body">
+                    <label className="appt-label">Select Available Slot</label>
+
+                    {loadingOptions.schedules && <div className="appt-slots-loading">Loading availability...</div>}
+
+                    {!loadingOptions.schedules && availableSlots.length === 0 && (
+                      <div className="appt-slots-empty">
+                        No slots available for this doctor on the selected date. Try another date or doctor.
+                      </div>
+                    )}
+
+                    {!loadingOptions.schedules && availableSlots.length > 0 && (
+                      <div className="appt-slots-grid">
+                        {availableSlots.map(s => (
+                          <button
+                            key={s}
+                            type="button"
+                            className={`appt-slot-btn ${selectedTime === s ? "appt-slot-active" : ""}`}
+                            onClick={() => setSelectedTime(s)}
+                          >
+                            {fmtSlot(s)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {selectedTime && (
+                <div className="appt-step">
+                  <div className="appt-step-num">7</div>
+                  <div className="appt-step-body">
+                    <label className="appt-label">Reason / Notes</label>
+                    <textarea
+                      className="appt-input appt-textarea"
+                      value={reason}
+                      onChange={e => setReason(e.target.value)}
+                      placeholder="Optional"
+                      rows={3}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="appt-form-actions">
+                <button type="button" className="appt-cancel-btn" onClick={closeModal}>
+                  Cancel
+                </button>
+                <button type="submit" className="appt-submit-btn" disabled={booking || !selectedTime}>
+                  {booking ? "Booking..." : `Confirm ${bookingCopy.badge} Booking`}
+                </button>
+              </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* ── APPOINTMENTS LIST ────────────────────────────────────────────────── */}
       <div className="db-card" style={{ padding: 0, overflow: "hidden" }}>
-        {/* Card header */}
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "20px 28px", borderBottom: "1px solid #d4e8da"
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 18 }}>📅</span>
             <span style={{ fontSize: 16, fontWeight: 700, color: "#1b3d2a" }}>All Appointments</span>
           </div>
           <span style={{ fontSize: 13, color: "#7a9485", fontWeight: 500 }}>
@@ -501,7 +591,6 @@ export default function Appointment() {
           </span>
         </div>
 
-        {/* Filter tabs */}
         <div style={{
           display: "flex", gap: 8, padding: "14px 28px",
           background: "#f0f8f2", borderBottom: "1px solid #d4e8da", flexWrap: "wrap"
@@ -525,7 +614,6 @@ export default function Appointment() {
           ))}
         </div>
 
-        {/* List */}
         <div>
           {loading ? (
             <div style={{ padding: "48px 28px", textAlign: "center", color: "#7a9485", fontSize: 14 }}>
@@ -538,93 +626,105 @@ export default function Appointment() {
           ) : filtered.map((a, i) => {
             const isPast = a.appointment_date ? new Date(`${a.appointment_date}T${a.appointment_time}`) < new Date() : false;
             const displayStatus = (a.status === "upcoming" && isPast) ? "completed" : a.status;
-            const s = STATUS_STYLES[displayStatus] || STATUS_STYLES.upcoming;
+            const statusStyle = STATUS_STYLES[displayStatus] || STATUS_STYLES.upcoming;
+            const type = TYPE_BADGES[a.appointment_type] || TYPE_BADGES.follow_up;
+            const isActionable = a.status === "upcoming" || a.status === "pending";
 
             return (
               <div
                 key={a.id}
-                className={a.appointment_type === 'emergency' ? "appt-row appt-row-emergency" : "appt-row"}
-                style={{ borderBottom: i < filtered.length - 1 ? "1px solid #eaf4ec" : "none" }}
+                style={{
+                  padding: "18px 28px",
+                  borderBottom: i < filtered.length - 1 ? "1px solid #eaf4ec" : "none",
+                }}
               >
-                {/* Date badge */}
-                <div className={`appt-date-badge ${a.appointment_type === 'emergency' ? "appt-date-badge-emergency" : ""}`}>
-                  <span style={{ fontSize: 18, fontWeight: 800, lineHeight: 1 }}>{a.day}</span>
-                  <span style={{ fontSize: 10, fontWeight: 600, opacity: 0.85 }}>{a.mon}</span>
-                </div>
+                {/* Top row: date badge + info + status pill */}
+                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                  <div className="appt-date-badge">
+                    <span style={{ fontSize: 18, fontWeight: 800, lineHeight: 1 }}>{a.day}</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, opacity: 0.85 }}>{a.mon}</span>
+                  </div>
 
-                {/* Info */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 15, fontWeight: 700, color: "#1b3d2a" }}>{a.doc || 'Unknown Doctor'}</span>
-                    {a.appointment_type === 'emergency' && (
-                      <span className="appt-em-badge">🚨 EMERGENCY</span>
-                    )}
-                    {a.appointment_type === 'priority' && (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 9px', background: '#fffbeb', color: '#b45309', border: '1.5px solid #fde68a', borderRadius: 50, fontSize: 11, fontWeight: 700 }}>⚡ PRIORITY</span>
-                    )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: "#1b3d2a" }}>{a.doc || "Unknown Doctor"}</span>
+                      <span
+                        className="appt-type-badge"
+                        style={{ background: type.bg, color: type.color, borderColor: type.border }}
+                      >
+                        {type.label}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 13, color: "#7a9485", marginTop: 2 }}>
+                      {a.dept || "Department"}
+                      {a.hospital && <> - {a.hospital}</>}
+                      {a.city && <> - {a.city}</>}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#aab8b0", marginTop: 1 }}>
+                      {a.time}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 13, color: "#7a9485", marginTop: 2 }}>
-                    {a.dept || 'Department'}
-                    {a.hospital && <> · {a.hospital}</>}
-                    {a.city && <> · {a.city}</>}
-                  </div>
-                  <div style={{ fontSize: 12, color: "#aab8b0", marginTop: 1 }}>
-                    {a.time}
-                  </div>
-                </div>
 
-                {/* Status + actions */}
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
                   <span style={{
                     padding: "4px 12px", borderRadius: 50,
-                    background: (a.status === "upcoming" && isPast) ? "#f3f4f6" : s.bg,
-                    color: (a.status === "upcoming" && isPast) ? "#4b5563" : s.color,
-                    border: `1px solid ${(a.status === "upcoming" && isPast) ? "#e5e7eb" : s.border}`,
-                    fontSize: 12, fontWeight: 700
+                    background: (a.status === "upcoming" && isPast) ? "#f3f4f6" : statusStyle.bg,
+                    color: (a.status === "upcoming" && isPast) ? "#4b5563" : statusStyle.color,
+                    border: `1px solid ${(a.status === "upcoming" && isPast) ? "#e5e7eb" : statusStyle.border}`,
+                    fontSize: 12, fontWeight: 700, flexShrink: 0
                   }}>
-                    {a.status === "upcoming" && isPast ? "Past Appointment" : s.label}
+                    {a.status === "upcoming" && isPast ? "Past Appointment" : statusStyle.label}
                   </span>
+                </div>
 
-                  {a.status === "upcoming" && !isPast && (
+                {/* Action buttons row — always visible for upcoming appointments */}
+                {isActionable && (
+                  <div style={{
+                    display: "flex", gap: 8, marginTop: 12, paddingLeft: 58,
+                    flexWrap: "wrap"
+                  }}>
                     <button
-                      onClick={() => handleCancel(a.id)}
-                      disabled={cancellingId === a.id}
+                      onClick={() => handleUpdateStatus(a.id, "completed")}
                       style={{
-                        padding: "6px 16px", borderRadius: 50,
-                        border: "1.5px solid #fecaca", background: "#fff",
-                        color: "#dc2626", fontSize: 12, fontWeight: 600,
-                        cursor: "pointer", opacity: cancellingId === a.id ? 0.6 : 1
+                        padding: "7px 18px", borderRadius: 50,
+                        border: "1.5px solid #bfdbfe", background: "#eff6ff",
+                        color: "#1d4ed8", fontSize: 12, fontWeight: 700,
+                        cursor: "pointer", transition: "all 0.2s"
                       }}
                     >
-                      {cancellingId === a.id ? "Cancelling..." : "Cancel"}
+                      ✓ Mark Completed
                     </button>
-                  )}
 
-                  {a.status === "upcoming" && isPast && (
-                    <div style={{ display: "flex", gap: 6 }}>
+                    {!isPast && (
                       <button
-                        onClick={() => handleUpdateStatus(a.id, "completed")}
+                        onClick={() => handleCancel(a.id)}
+                        disabled={cancellingId === a.id}
                         style={{
-                          padding: "6px 12px", borderRadius: 50,
-                          border: "1.5px solid #bfdbfe", background: "#eff6ff",
-                          color: "#1d4ed8", fontSize: 12, fontWeight: 600, cursor: "pointer"
+                          padding: "7px 18px", borderRadius: 50,
+                          border: "1.5px solid #fecaca", background: "#fff",
+                          color: "#dc2626", fontSize: 12, fontWeight: 700,
+                          cursor: "pointer", opacity: cancellingId === a.id ? 0.6 : 1,
+                          transition: "all 0.2s"
                         }}
                       >
-                        ✓ Completed
+                        {cancellingId === a.id ? "Cancelling..." : "✕ Cancel"}
                       </button>
+                    )}
+
+                    {isPast && (
                       <button
                         onClick={() => handleUpdateStatus(a.id, "missed")}
                         style={{
-                          padding: "6px 12px", borderRadius: 50,
+                          padding: "7px 18px", borderRadius: 50,
                           border: "1.5px solid #fde68a", background: "#fffbeb",
-                          color: "#b45309", fontSize: 12, fontWeight: 600, cursor: "pointer"
+                          color: "#b45309", fontSize: 12, fontWeight: 700,
+                          cursor: "pointer", transition: "all 0.2s"
                         }}
                       >
-                        ✖ Missed
+                        ⚠ Mark Missed
                       </button>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}

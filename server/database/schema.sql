@@ -53,9 +53,13 @@ CREATE TABLE IF NOT EXISTS medical_records (
   facility        TEXT,                 -- clinical facility
   notes           TEXT,                 -- physician remarks
   vitals          JSONB DEFAULT '[]'::jsonb, -- parsed vitals list
+  analysis        JSONB,                -- AI-assisted report interpretation
   upload_date     TIMESTAMP DEFAULT NOW(),
   created_at      TIMESTAMP DEFAULT NOW()
 );
+
+ALTER TABLE medical_records
+  ADD COLUMN IF NOT EXISTS analysis JSONB;
 
 -- ────────────────────────────────────────────────
 -- 4. MEDICATIONS TABLE (linked to MedicineVerification.js)
@@ -149,8 +153,24 @@ CREATE TABLE IF NOT EXISTS hospitals (
   address         TEXT,
   phone           TEXT,
   website         TEXT,
+  emergency_phone TEXT,
+  emergency_bed_capacity INTEGER,
+  ambulance_fleet INTEGER,
+  app_reserved_beds INTEGER,
+  app_reserved_ambulances INTEGER,
+  data_source_url TEXT,
+  data_verified_at TIMESTAMPTZ,
   created_at      TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE hospitals
+  ADD COLUMN IF NOT EXISTS emergency_phone TEXT,
+  ADD COLUMN IF NOT EXISTS emergency_bed_capacity INTEGER,
+  ADD COLUMN IF NOT EXISTS ambulance_fleet INTEGER,
+  ADD COLUMN IF NOT EXISTS app_reserved_beds INTEGER,
+  ADD COLUMN IF NOT EXISTS app_reserved_ambulances INTEGER,
+  ADD COLUMN IF NOT EXISTS data_source_url TEXT,
+  ADD COLUMN IF NOT EXISTS data_verified_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS doctors (
   id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -182,27 +202,21 @@ CREATE TABLE IF NOT EXISTS doctor_schedules (
   max_slots       INTEGER DEFAULT 20
 );
 
--- ────────────────────────────────────────────────
--- 10. TRIAGE & EMERGENCY SYSTEM TABLES
--- ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS triage_requests (
-  id uuid primary key default gen_random_uuid(),
-  patient_id uuid REFERENCES patients(id) ON DELETE CASCADE,
-  symptoms text not null,
-  symptom_duration text,
-  severity_result text check (severity_result in ('regular','priority','emergency')),
-  recommended_department_id uuid references departments(id),
-  recommended_city_id uuid references cities(id),
-  created_at timestamptz default now()
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  patient_id      UUID REFERENCES patients(id) ON DELETE SET NULL,
+  symptoms        TEXT NOT NULL,
+  symptom_duration TEXT,
+  severity_result TEXT CHECK (severity_result IN ('regular','priority','emergency')),
+  recommended_department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
+  recommended_city_id UUID REFERENCES cities(id) ON DELETE SET NULL,
+  created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
--- DROP existing appointments table to rebuild with new schema
-DROP TABLE IF EXISTS appointments CASCADE;
-
-CREATE TABLE appointments (
+CREATE TABLE IF NOT EXISTS appointments (
   id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   patient_id      UUID REFERENCES patients(id) ON DELETE CASCADE,
-  appointment_type TEXT CHECK (appointment_type IN ('follow_up','regular','priority','emergency')),
+  appointment_type TEXT CHECK (appointment_type IN ('follow_up','regular','priority','emergency')) DEFAULT 'follow_up',
   doctor_hospital_id UUID REFERENCES doctor_hospitals(id) ON DELETE CASCADE,
   appointment_date DATE NOT NULL,
   appointment_time TIME NOT NULL,
@@ -212,48 +226,89 @@ CREATE TABLE appointments (
   created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE appointments
+  ADD COLUMN IF NOT EXISTS appointment_type TEXT CHECK (appointment_type IN ('follow_up','regular','priority','emergency')) DEFAULT 'follow_up',
+  ADD COLUMN IF NOT EXISTS triage_id UUID REFERENCES triage_requests(id) ON DELETE SET NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS unique_appt_slot
+ON appointments(doctor_hospital_id, appointment_date, appointment_time);
+
 CREATE TABLE IF NOT EXISTS emergency_requests (
-  id uuid primary key default gen_random_uuid(),
-  patient_id uuid REFERENCES patients(id) ON DELETE CASCADE,
-  triage_id uuid references triage_requests(id) ON DELETE CASCADE,
-  city_id uuid references cities(id) ON DELETE SET NULL,
-  department_id uuid references departments(id) ON DELETE SET NULL,
-  hospital_id uuid references hospitals(id) ON DELETE SET NULL,
-  symptoms text not null,
-  patient_location text,
-  patient_phone text,
-  ambulance_requested boolean default false,
-  ambulance_status text default 'not_requested',
-  status text default 'open',
-  assigned_doctor_hospital_id uuid references doctor_hospitals(id) ON DELETE SET NULL,
-  accepted_by_doctor_id uuid references doctors(id) ON DELETE SET NULL,
-  accepted_at timestamptz,
-  created_at timestamptz default now()
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  patient_id UUID REFERENCES patients(id) ON DELETE SET NULL,
+  triage_id UUID REFERENCES triage_requests(id) ON DELETE SET NULL,
+  city_id UUID REFERENCES cities(id) ON DELETE SET NULL,
+  department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
+  hospital_id UUID REFERENCES hospitals(id) ON DELETE SET NULL,
+  symptoms TEXT NOT NULL,
+  patient_location TEXT,
+  patient_phone TEXT,
+  requested_arrival_time TIMESTAMPTZ,
+  ambulance_requested BOOLEAN DEFAULT false,
+  ambulance_status TEXT DEFAULT 'not_requested',
+  status TEXT DEFAULT 'open',
+  assigned_doctor_hospital_id UUID REFERENCES doctor_hospitals(id) ON DELETE SET NULL,
+  accepted_by_doctor_id UUID REFERENCES doctors(id) ON DELETE SET NULL,
+  accepted_at TIMESTAMPTZ,
+  cleared_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE emergency_requests
+  ADD COLUMN IF NOT EXISTS requested_arrival_time TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS cleared_at TIMESTAMPTZ;
+
 CREATE TABLE IF NOT EXISTS emergency_alerts (
-  id uuid primary key default gen_random_uuid(),
-  emergency_request_id uuid references emergency_requests(id) on delete cascade,
-  doctor_hospital_id uuid references doctor_hospitals(id) on delete cascade,
-  status text default 'sent',
-  created_at timestamptz default now(),
-  responded_at timestamptz
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  emergency_request_id UUID REFERENCES emergency_requests(id) ON DELETE CASCADE,
+  doctor_hospital_id UUID REFERENCES doctor_hospitals(id) ON DELETE CASCADE,
+  status TEXT DEFAULT 'sent',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  responded_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS ambulance_requests (
-  id uuid primary key default gen_random_uuid(),
-  emergency_request_id uuid references emergency_requests(id) on delete cascade,
-  patient_id uuid REFERENCES patients(id) ON DELETE CASCADE,
-  pickup_location text not null,
-  destination_hospital_id uuid references hospitals(id) ON DELETE SET NULL,
-  patient_phone text,
-  status text default 'requested',
-  created_at timestamptz default now()
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  emergency_request_id UUID REFERENCES emergency_requests(id) ON DELETE CASCADE,
+  patient_id UUID REFERENCES patients(id) ON DELETE SET NULL,
+  pickup_location TEXT NOT NULL,
+  destination_hospital_id UUID REFERENCES hospitals(id) ON DELETE SET NULL,
+  patient_phone TEXT,
+  status TEXT DEFAULT 'requested',
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Unique index to prevent double booking the exact same doctor at the same time
-CREATE UNIQUE INDEX IF NOT EXISTS unique_appt_slot 
-ON appointments(doctor_hospital_id, appointment_date, appointment_time);
+-- ────────────────────────────────────────────────
+-- 11. MEDICINE BATCHES TABLE
+-- ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS medicine_batches (
+  id                  UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  medicine_name       TEXT NOT NULL,
+  brand_name          TEXT NOT NULL,
+  manufacturer        TEXT NOT NULL,
+  batch_code          TEXT UNIQUE NOT NULL,
+  serial_number       TEXT,
+  barcode_value       TEXT,
+  manufacturing_date  DATE NOT NULL,
+  expiry_date         DATE NOT NULL,
+  dosage_form         TEXT NOT NULL,
+  strength            TEXT NOT NULL,
+  country             TEXT NOT NULL,
+  source              TEXT NOT NULL,
+  verification_status TEXT DEFAULT 'verified',
+  created_at          TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at          TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_medicine_batches_code ON medicine_batches(batch_code);
+
+-- Alter existing medicine_verifications
+ALTER TABLE medicine_verifications 
+ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'unknown',
+ADD COLUMN IF NOT EXISTS brand_name TEXT,
+ADD COLUMN IF NOT EXISTS source TEXT,
+ADD COLUMN IF NOT EXISTS dosage_form TEXT,
+ADD COLUMN IF NOT EXISTS strength TEXT;
 
 -- ────────────────────────────────────────────────
 -- 11. MEDICINE BATCHES TABLE

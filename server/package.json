@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "upsert:emergency-directory": "node database/upsertEmergencyDirectory.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.43.5",
