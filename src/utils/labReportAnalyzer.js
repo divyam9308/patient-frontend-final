@@ -541,8 +541,8 @@ const LAB_MARKERS = [
 ];
 
 const STOP_WORDS = new Set(["age", "date", "page", "id", "pin", "phone"]);
-const MAX_ANALYSIS_TEXT_LENGTH = 60000;
-const MAX_PDF_PARSE_BYTES = 1200000;
+const MAX_ANALYSIS_TEXT_LENGTH = 200000;
+const MAX_PDF_PARSE_BYTES = 10485760; // 10MB
 
 function normalizeText(text) {
   return String(text || "")
