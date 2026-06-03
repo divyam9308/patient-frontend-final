@@ -343,7 +343,7 @@
 
 .mr-tracker-groups {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -358,12 +358,16 @@
   border-color: #bbf7d0;
 }
 
-.mr-tracker-group.low {
-  border-color: #bfdbfe;
+.mr-tracker-group.borderline {
+  border-color: #fde68a;
 }
 
 .mr-tracker-group.high {
   border-color: #fecaca;
+}
+
+.mr-tracker-group.critical {
+  border-color: #7f1d1d;
 }
 
 .mr-tracker-group-header {
@@ -441,9 +445,9 @@
 }
 
 .mr-trend-item.normal { background: #f0fdf4; border-color: #bbf7d0; }
-.mr-trend-item.low { background: #eff6ff; border-color: #bfdbfe; }
-.mr-trend-item.high,
-.mr-trend-item.critical { background: #fef2f2; border-color: #fecaca; }
+.mr-trend-item.borderline { background: #fffbeb; border-color: #fde68a; }
+.mr-trend-item.high { background: #fef2f2; border-color: #fecaca; }
+.mr-trend-item.critical { background: #7f1d1d; border-color: #7f1d1d; }
 
 .mr-trend-top {
   display: flex;
@@ -468,10 +472,11 @@
 }
 
 .mr-trend-status.normal { background: #d1fae5; color: #065f46; }
+.mr-trend-status.borderline { background: #fef3c7; color: #92400e; }
 .mr-trend-status.warning { background: #fef3c7; color: #92400e; }
 .mr-trend-status.alert { background: #fee2e2; color: #991b1b; }
-.mr-trend-status.high,
-.mr-trend-status.critical { background: #fee2e2; color: #991b1b; }
+.mr-trend-status.high { background: #fee2e2; color: #991b1b; }
+.mr-trend-status.critical { background: #450a0a; color: #fff; }
 .mr-trend-status.low { background: #eff6ff; color: #1e40af; }
 
 .mr-trend-middle {
@@ -503,9 +508,22 @@
 }
 
 .mr-vital-value.low,
+.mr-vital-value.warning,
+.mr-vital-value.borderline,
 .mr-trend-value.low,
-.mr-finding-vital-val.low {
-  color: #1d4ed8;
+.mr-trend-value.warning,
+.mr-trend-value.borderline,
+.mr-finding-vital-val.low,
+.mr-finding-vital-val.warning,
+.mr-finding-vital-val.borderline {
+  color: #92400e;
+}
+
+.mr-trend-item.critical .mr-trend-label,
+.mr-trend-item.critical .mr-trend-value,
+.mr-trend-item.critical .mr-trend-change,
+.mr-trend-item.critical .mr-sparkline-wrap {
+  color: #fff;
 }
 
 .mr-vital-value.uncertain,
@@ -550,9 +568,10 @@
 }
 
 .mr-spark-bar-fill.normal { background: #10b981; }
-.mr-spark-bar-fill.low { background: #3b82f6; }
-.mr-spark-bar-fill.high,
-.mr-spark-bar-fill.critical { background: #ef4444; }
+.mr-spark-bar-fill.borderline { background: #f59e0b; }
+.mr-spark-bar-fill.low { background: #f59e0b; }
+.mr-spark-bar-fill.high { background: #ef4444; }
+.mr-spark-bar-fill.critical { background: #450a0a; }
 
 @media (max-width: 900px) {
   .mr-tracker-groups {

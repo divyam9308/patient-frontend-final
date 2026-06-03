@@ -228,14 +228,22 @@ export default function MedicalRecords() {
   const isConfirmedAbnormal = (vital) =>
     ["high", "low", "critical"].includes(statusText(vital.status));
   const vitalValueClass = (status) => `mr-vital-value ${statusText(status) || "uncertain"}`;
+  const trackerStatus = (vital) => {
+    const value = statusText(vital.status);
+    if (value === "normal") return "normal";
+    if (value === "critical") return "critical";
+    if (value === "high") return "high";
+    return "borderline";
+  };
 
   const trendItems = records
     .flatMap(record => (record.vitals || []).map(vital => ({ ...vital, recordName: record.name, recordDate: record.date })))
     .filter(vital => vital.name && vital.value && vital.valid !== false);
   const groupedTrendItems = {
-    normal: trendItems.filter(vital => statusText(vital.status) === "normal"),
-    low: trendItems.filter(vital => statusText(vital.status) === "low"),
-    high: trendItems.filter(vital => ["high", "critical"].includes(statusText(vital.status))),
+    normal: trendItems.filter(vital => trackerStatus(vital) === "normal"),
+    borderline: trendItems.filter(vital => trackerStatus(vital) === "borderline"),
+    high: trendItems.filter(vital => trackerStatus(vital) === "high"),
+    critical: trendItems.filter(vital => trackerStatus(vital) === "critical"),
   };
 
   const validPreview = parsedVitalsPreview.filter(v => v.valid);
@@ -483,8 +491,9 @@ export default function MedicalRecords() {
             <div className="mr-tracker-groups">
               {[
                 { key: "normal", title: "Normal", items: groupedTrendItems.normal },
-                { key: "low", title: "Low", items: groupedTrendItems.low },
+                { key: "borderline", title: "Borderline", items: groupedTrendItems.borderline },
                 { key: "high", title: "High", items: groupedTrendItems.high },
+                { key: "critical", title: "Critical", items: groupedTrendItems.critical },
               ].map(group => (
                 <section className={`mr-tracker-group ${group.key}`} key={group.key}>
                   <div className="mr-tracker-group-header">
@@ -496,15 +505,15 @@ export default function MedicalRecords() {
                   ) : (
                     <div className="mr-vitals-trends-list">
                       {group.items.map((vital, index) => (
-                        <div className={`mr-trend-item ${statusText(vital.status)}`} key={`${group.key}-${vital.recordName}-${vital.name}-${index}`}>
+                        <div className={`mr-trend-item ${trackerStatus(vital)}`} key={`${group.key}-${vital.recordName}-${vital.name}-${index}`}>
                           <div className="mr-trend-top">
                             <span className="mr-trend-label">{vital.name}</span>
-                            <span className={`mr-trend-status ${statusText(vital.status)}`}>
-                              {displayStatus(vital.status)}
+                            <span className={`mr-trend-status ${trackerStatus(vital)}`}>
+                              {group.title}
                             </span>
                           </div>
                           <div className="mr-trend-middle">
-                            <span className={`mr-trend-value ${statusText(vital.status)}`}>
+                            <span className={`mr-trend-value ${trackerStatus(vital)}`}>
                               {vital.value} {vital.unit || ""}
                             </span>
                             <span className="mr-trend-change">
@@ -514,7 +523,7 @@ export default function MedicalRecords() {
                           <div className="mr-sparkline-wrap">
                             <span>{vital.recordDate || "Date not set"}</span>
                             <div className="mr-spark-bar-container">
-                              <div className={`mr-spark-bar-fill ${statusText(vital.status)}`} style={{ width: "100%" }} />
+                              <div className={`mr-spark-bar-fill ${trackerStatus(vital)}`} style={{ width: "100%" }} />
                             </div>
                             <span>{vital.recordName}</span>
                           </div>
