@@ -104,78 +104,42 @@ export const verifyMedicine = async (req, res) => {
     }
 
     const code = batchCode.toUpperCase().trim();
-    let verified = false;
-    let finalName = name || `Unknown Batch (${code})`;
-    let mfr = "Unverified / Fake Source";
-    let expiry = "—";
-    let color = "#fffbeb";
-    let icon = "⚠️";
-    let status = "warning";
-    let brandName = null;
-    let source = "Unknown";
-    let dosageForm = null;
-    let strength = null;
-    let verification = buildLegacyVerification(code, name);
+    const verification = buildLegacyVerification(code, name);
 
-    // Database lookup
     const { data: batchMatch, error: lookupError } = await supabase
       .from('medicine_batches')
       .select('*')
       .eq('batch_code', code)
       .maybeSingle();
 
-    if (lookupError) {
+    if (lookupError && !isMissingTableError(lookupError, 'medicine_batches')) {
       return res.status(500).json({ error: lookupError.message });
     }
 
-    if (batchMatch) {
-      finalName = batchMatch.medicine_name;
-      mfr = batchMatch.manufacturer;
-      brandName = batchMatch.brand_name;
-      source = batchMatch.source;
-      dosageForm = batchMatch.dosage_form;
-      strength = batchMatch.strength;
-      if (!isMissingTableError(lookupError, 'medicine_batches')) {
-        console.warn('[Medicine Verification] Falling back to legacy verification after lookup error:', lookupError.message);
-      }
+    if (lookupError && isMissingTableError(lookupError, 'medicine_batches')) {
+      console.warn('[Medicine Verification] medicine_batches table unavailable; using legacy verification fallback.');
     }
 
-    if (!lookupError && batchMatch) {
-      verification.finalName = batchMatch.medicine_name;
-      verification.mfr = batchMatch.manufacturer;
-      verification.brandName = batchMatch.brand_name;
-      verification.source = batchMatch.source;
-      verification.dosageForm = batchMatch.dosage_form;
-      verification.strength = batchMatch.strength;
+    if (batchMatch) {
+      verification.finalName = batchMatch.medicine_name || verification.finalName;
+      verification.mfr = batchMatch.manufacturer || verification.mfr;
+      verification.brandName = batchMatch.brand_name || null;
+      verification.source = batchMatch.source || 'Medicine batch database';
+      verification.dosageForm = batchMatch.dosage_form || null;
+      verification.strength = batchMatch.strength || null;
 
-      // Handle Date correctly
       const expDate = new Date(batchMatch.expiry_date);
       const now = new Date();
-      expiry = expDate.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
-      
-      if (batchMatch.verification_status === 'recalled') {
-        verified = false;
-        status = 'recalled';
-        color = '#fee2e2'; // Light red
-        icon = '🚨';
-      } else if (expDate < now || batchMatch.verification_status === 'expired') {
-        verified = false;
-        status = 'expired';
-        color = '#ffedd5'; // Light orange
-        icon = '⏳';
-      } else {
-        verified = true;
-        status = 'verified';
-        color = '#e8f5ee'; // Light green
-        icon = '✅';
-      verification.expiry = expDate.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
-      
+      verification.expiry = Number.isNaN(expDate.getTime())
+        ? verification.expiry
+        : expDate.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+
       if (batchMatch.verification_status === 'recalled') {
         verification.verified = false;
         verification.status = 'recalled';
         verification.color = '#fee2e2';
         verification.icon = '🚨';
-      } else if (expDate < now || batchMatch.verification_status === 'expired') {
+      } else if (batchMatch.verification_status === 'expired' || (!Number.isNaN(expDate.getTime()) && expDate < now)) {
         verification.verified = false;
         verification.status = 'expired';
         verification.color = '#ffedd5';
@@ -186,11 +150,6 @@ export const verifyMedicine = async (req, res) => {
         verification.color = '#e8f5ee';
         verification.icon = '✅';
       }
-    } else {
-      status = 'warning';
-      color = '#fffbeb'; // Light yellow
-      icon = '⚠️';
-      verified = false;
     }
 
     const baseInsert = {
@@ -201,6 +160,7 @@ export const verifyMedicine = async (req, res) => {
       batch: code,
       verified: verification.verified
     };
+
     const enrichedInsert = {
       ...baseInsert,
       status: verification.status,
@@ -212,19 +172,6 @@ export const verifyMedicine = async (req, res) => {
 
     let { data: newVerification, error } = await supabase
       .from('medicine_verifications')
-      .insert({
-        patient_id: patientId,
-        name: finalName,
-        manufacturer: mfr,
-        expiry,
-        batch: code,
-        verified,
-        status,
-        brand_name: brandName,
-        source,
-        dosage_form: dosageForm,
-        strength
-      })
       .insert(enrichedInsert)
       .select()
       .single();
@@ -243,8 +190,8 @@ export const verifyMedicine = async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
-    const dateObj = new Date(newVerification.verification_date);
-    const formattedDate = dateObj.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+    const dateObj = new Date(newVerification.verification_date || Date.now());
+    const formattedDate = dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 
     res.status(201).json({
       id: newVerification.id,
@@ -254,13 +201,6 @@ export const verifyMedicine = async (req, res) => {
       batch: newVerification.batch,
       verified: newVerification.verified,
       date: formattedDate,
-      icon,
-      color,
-      status: newVerification.status,
-      brandName: newVerification.brand_name,
-      source: newVerification.source,
-      dosageForm: newVerification.dosage_form,
-      strength: newVerification.strength
       icon: verification.icon,
       color: verification.color,
       status: newVerification.status || verification.status,
