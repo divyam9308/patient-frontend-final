@@ -1021,6 +1021,13 @@ function statusFromRange(value, prefix, reportRange) {
   return "normal";
 }
 
+function shouldEscalateToCritical(value, status, reportRange) {
+  if (String(status || "").toLowerCase() !== "high") return false;
+  if (!Number.isFinite(value) || typeof reportRange?.max !== "number" || reportRange.max <= 0) return false;
+
+  return value >= reportRange.max * 1.3;
+}
+
 function statusFromCategoricalBands(value, reportRange) {
   if (!Array.isArray(reportRange?.bands) || !Number.isFinite(value)) return null;
 
@@ -1033,6 +1040,7 @@ function statusFromCategoricalBands(value, reportRange) {
 
   const label = String(matchedBand.labelKey || "").toLowerCase();
   if (/\b(low|deficient)\b/.test(label)) return "low";
+  if (/\bvery high\b/.test(label)) return "critical";
   if (/\b(very high|high)\b/.test(label) && !/\bborderline\b/.test(label)) return "high";
   if (/\b(borderline|near|above optimal|elevated)\b/.test(label)) return "borderline";
   if (/\b(optimal|desirable|normal)\b/.test(label)) return "normal";
@@ -1118,6 +1126,10 @@ function extractNumberAfterAlias(matchObj, alias, marker, lines) {
   let confidence = 100;
   let status = explicitFlag || statusFromRange(result.value, result.prefix, reportRange);
   let reason = "";
+
+  if (!explicitFlag && shouldEscalateToCritical(result.value, status, reportRange)) {
+    status = "critical";
+  }
 
   if (hasInvalidRawUnit(unit)) {
     confidence = Math.min(confidence, 90);

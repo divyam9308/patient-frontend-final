@@ -69,4 +69,39 @@ describe("analyzeLabReport range extraction", () => {
       valid: true,
     });
   });
+
+  test("keeps mildly high values out of critical", () => {
+    const report = [
+      "WBC Count",
+      "10570",
+      "4000-10000 cells/uL",
+    ].join("\n");
+
+    const wbc = analyzeLabReport(report).vitals.find(vital => vital.name === "WBC Count");
+
+    expect(wbc).toMatchObject({
+      value: "10570",
+      numericValue: 10570,
+      status: "high",
+      valid: true,
+    });
+  });
+
+  test("marks values 30 percent above the upper range as critical", () => {
+    const report = [
+      "Fasting Glucose",
+      "141.0",
+      "74-106 mg/dL",
+    ].join("\n");
+
+    const glucose = analyzeLabReport(report).vitals.find(vital => vital.name === "Fasting Glucose");
+
+    expect(glucose).toMatchObject({
+      value: "141.0",
+      numericValue: 141,
+      range: "74-106",
+      status: "critical",
+      valid: true,
+    });
+  });
 });
