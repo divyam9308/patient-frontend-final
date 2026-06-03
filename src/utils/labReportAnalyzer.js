@@ -1724,7 +1724,7 @@ export function analyzeLabReport(rawText) {
         .map(matchObj => extractNumberAfterAlias(matchObj, alias, marker, lines));
       const found = isHbA1cMarker(marker)
         ? extractedResults.find(result => result?.valid)
-        : extractedResults.find(result => result && (result.status === "uncertain" || !Number.isNaN(result.value)));
+        : extractedResults.find(result => result && Number.isFinite(result.value));
       if (!found) continue;
 
       const resultValue = found.valueText || "";

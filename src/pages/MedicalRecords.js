@@ -224,7 +224,6 @@ export default function MedicalRecords() {
     return value ? value.charAt(0).toUpperCase() + value.slice(1) : "Uncertain";
   };
   const sourcePage = (vital) => Number(vital.source_page || vital.sourcePage || 0);
-  const confidence = (vital) => Number(vital.confidence || 0);
   const isConfirmedAbnormal = (vital) =>
     ["high", "low", "critical"].includes(statusText(vital.status));
   const vitalValueClass = (status) => `mr-vital-value ${statusText(status) || "uncertain"}`;
@@ -542,7 +541,7 @@ export default function MedicalRecords() {
           MODAL: UPLOAD RECORD
           ============================================= */}
       {showUploadModal && (
-        <div className="mr-modal-overlay">
+        <div className="mr-modal-overlay mr-upload-overlay">
           <div className="mr-modal-container">
             <button
               className="mr-modal-close"
@@ -739,7 +738,7 @@ export default function MedicalRecords() {
                                 <span className="mr-abnormal-ref-val">Report Range: {vital.reference_range || vital.range}</span>
                               </div>
                               <small className="mr-source-trace">
-                                Page {sourcePage(vital)} | Confidence {confidence(vital)}%
+                                Page {sourcePage(vital)}
                               </small>
                             </div>
                           ))}
@@ -939,7 +938,7 @@ export default function MedicalRecords() {
                         {abnormalRecordVitals.length === 0 ? (
                           <tr>
                             <td colSpan="5" style={{ color: "var(--text-muted)" }}>
-                              No abnormal alert is shown because no row-validated result met the 95 confidence rule.
+                              No abnormal row-validated result is available for this record.
                             </td>
                           </tr>
                         ) : (
@@ -954,7 +953,7 @@ export default function MedicalRecords() {
                                   {displayStatus(v.status)}
                                 </span>
                               </td>
-                              <td>Page {sourcePage(v)} | {confidence(v)}%</td>
+                              <td>Page {sourcePage(v)}</td>
                             </tr>
                           ))
                         )}

@@ -188,4 +188,23 @@ describe("analyzeLabReport range extraction", () => {
       valid: true,
     });
   });
+
+  test("does not invent VLDL value from reference range only", () => {
+    const report = [
+      "Lipid Profile",
+      "VLDL Cholesterol",
+      "Reference Range 5 - 40 mg/dL",
+      "LDL Cholesterol 100 mg/dL <100",
+    ].join("\n");
+
+    const result = analyzeLabReport(report);
+    const vldl = result.vitals.find(vital => vital.name === "VLDL Cholesterol");
+    const ldl = result.vitals.find(vital => vital.name === "LDL Cholesterol");
+
+    expect(vldl).toBeUndefined();
+    expect(ldl).toMatchObject({
+      value: "100",
+      valid: true,
+    });
+  });
 });
