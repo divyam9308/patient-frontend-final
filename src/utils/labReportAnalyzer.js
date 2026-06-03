@@ -556,23 +556,37 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function aliasPattern(alias) {
-  return `(?:^|[^A-Za-z0-9])${escapeRegExp(alias)}(?=$|[^A-Za-z0-9])`;
+function rowAliasPattern(alias) {
+  return `^\\s*(?:\\d+[.)-]?\\s+)?${escapeRegExp(alias)}(?=$|[^A-Za-z0-9])`;
 }
 
 function extractLines(rawText) {
   const normalized = normalizeText(rawText).slice(0, MAX_ANALYSIS_TEXT_LENGTH);
-  const lines = normalized
+  const sourceLines = normalized
     .split(/\n+/)
     .map(line => line.trim())
     .filter(Boolean);
 
-  return lines.length > 1 ? lines : normalized.split(/\s{2,}|(?=[A-Z][A-Za-z /+-]{2,}\s+\d)/).map(line => line.trim()).filter(Boolean);
+  const lines = sourceLines.length > 1
+    ? sourceLines
+    : normalized.split(/\s{2,}|(?=[A-Z][A-Za-z /+-]{2,}\s+\d)/).map(line => line.trim()).filter(Boolean);
+
+  let currentPage = 1;
+  return lines.reduce((rows, line) => {
+    const pageMatch = line.match(/^\[\[PAGE:(\d+)\]\]$/i);
+    if (pageMatch) {
+      currentPage = Number(pageMatch[1]);
+      return rows;
+    }
+
+    rows.push({ text: line, page: currentPage });
+    return rows;
+  }, []);
 }
 
 function findMarkerLines(lines, alias) {
-  const pattern = new RegExp(aliasPattern(alias), "i");
-  return lines.filter(line => pattern.test(line));
+  const pattern = new RegExp(rowAliasPattern(alias), "i");
+  return lines.filter(row => pattern.test(row.text));
 }
 
 function getReferenceRangeMatches(tail) {
@@ -666,114 +680,217 @@ function isInsideRanges(index, ranges) {
 function isDescriptorNumber(tail, numberMatch) {
   const start = numberMatch.index || 0;
   const after = tail.slice(start + numberMatch[0].length, start + numberMatch[0].length + 10).toLowerCase();
-  return after.startsWith("-oh") || after.startsWith(" hydroxy");
+  const before = tail.slice(Math.max(0, start - 6), start).toLowerCase();
+  return after.startsWith("-oh")
+    || after.startsWith(" hydroxy")
+    || after.startsWith("^")
+    || before.endsWith("^")
+    || before.endsWith("10^");
 }
 
-function pickResultFromTail(tail, ranges) {
+function getResultCandidates(tail, ranges) {
   const preferredPattern = /(?:result|observed|value|reading|level)\s*[:=-]?\s*([<>]?)\s*(-?\d+(?:\.\d+)?)/i;
   const preferred = tail.match(preferredPattern);
 
   if (preferred && !isInsideRanges(preferred.index || 0, ranges)) {
-    return {
+    return [{
       prefix: preferred[1] || "",
       value: Number(preferred[2]),
-    };
+      valueText: `${preferred[1] || ""}${preferred[2]}`,
+      start: preferred.index || 0,
+      end: (preferred.index || 0) + preferred[0].length,
+    }];
   }
 
   const numberPattern = /([<>]?)\s*(-?\d+(?:\.\d+)?)/g;
-  const numbers = [...tail.matchAll(numberPattern)]
+  return [...tail.matchAll(numberPattern)]
     .filter(match => !isInsideRanges(match.index || 0, ranges))
-    .filter(match => !isDescriptorNumber(tail, match));
-
-  if (!numbers.length) return null;
-
-  return {
-    prefix: numbers[0][1] || "",
-    value: Number(numbers[0][2]),
-  };
+    .filter(match => !isDescriptorNumber(tail, match))
+    .map(match => ({
+      prefix: match[1] || "",
+      value: Number(match[2]),
+      valueText: `${match[1] || ""}${match[2]}`,
+      start: match.index || 0,
+      end: (match.index || 0) + match[0].length,
+    }));
 }
 
-function extractQualitativeValue(line, alias, marker) {
-  const pattern = new RegExp(aliasPattern(alias), "i");
-  const match = line.match(pattern);
-  if (!match) return null;
+function extractExplicitFlag(tail) {
+  const flagMatch = tail.match(/(?:^|[\s|,;:(])(?:flag|status)?\s*:?\s*(critical|crit|panic|hh|ll|high|low|h|l)(?=$|[\s|,;:)])/i);
+  if (!flagMatch) return null;
 
-  const tail = line.slice((match.index || 0) + match[0].length).toLowerCase();
-  
-  // Look for positive terms
-  for (const term of marker.positiveTerms) {
-    const termPattern = new RegExp(`(?:^|[^A-Za-z0-9])${term}(?=$|[^A-Za-z0-9])`, "i");
-    if (termPattern.test(tail)) {
-      return {
-        value: "Present (+)",
-        status: "High",
-        explanation: `${marker.name} is positive/reactive.`,
-        possibleConditions: marker.high || [],
-        raw: line.trim()
-      };
-    }
-  }
-
-  // Look for negative terms
-  for (const term of marker.negativeTerms) {
-    const termPattern = new RegExp(`(?:^|[^A-Za-z0-9])${term}(?=$|[^A-Za-z0-9])`, "i");
-    if (termPattern.test(tail)) {
-      return {
-        value: "Negative / Normal",
-        status: "Normal",
-        explanation: `${marker.name} is negative/non-reactive.`,
-        possibleConditions: [],
-        raw: line.trim()
-      };
-    }
-  }
-
+  const flag = flagMatch[1].toLowerCase();
+  if (["critical", "crit", "panic", "hh", "ll"].includes(flag)) return "critical";
+  if (["h", "high"].includes(flag)) return "high";
+  if (["l", "low"].includes(flag)) return "low";
   return null;
 }
 
-function extractNumberAfterAlias(line, alias) {
+const UNIT_ALIASES = {
+  "g/dL": ["g/dl", "gm/dl", "g dl"],
+  "cells/uL": ["cells/ul", "cells/µl", "cells/μl", "/cumm", "cumm", "10^3/ul", "10^3/µl", "10^9/l"],
+  "lakhs/uL": ["lakhs/ul", "lakh/ul", "lakhs/cumm", "lakh/cumm", "10^3/ul", "10^3/µl"],
+  "mm/hr": ["mm/hr", "mm/hour"],
+  "mg/L": ["mg/l"],
+  "mg/dL": ["mg/dl"],
+  "%": ["%"],
+  "mIU/L": ["miu/l", "uiu/ml", "µiu/ml", "μiu/ml"],
+  "ng/dL": ["ng/dl"],
+  "ug/dL": ["ug/dl", "µg/dl", "μg/dl", "mcg/dl"],
+  "pg/mL": ["pg/ml"],
+  "ng/mL": ["ng/ml"],
+  "mL/min/1.73m2": ["ml/min/1.73m2", "ml/min/1.73 m2", "ml/min"],
+  "mmol/L": ["mmol/l", "meq/l"],
+  "U/L": ["u/l", "iu/l"],
+  "ratio": ["ratio"],
+  "fL": ["fl"],
+  "pg": ["pg"],
+};
+
+function normalizeUnitText(unit) {
+  return String(unit || "")
+    .replace(/μ/g, "µ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function getExpectedUnits(marker) {
+  return [...new Set([marker.unit, ...(UNIT_ALIASES[marker.unit] || [])].filter(Boolean).map(normalizeUnitText))];
+}
+
+function extractUnitAfterValue(tail, candidate, marker) {
+  const afterValue = tail
+    .slice(candidate.end)
+    .trim()
+    .replace(/^(critical|crit|panic|hh|ll|high|low|h|l)(?=$|[\s|,;:)])\s*/i, "");
+  const expectedUnits = getExpectedUnits(marker);
+
+  for (const expected of expectedUnits) {
+    const pattern = new RegExp(`^${escapeRegExp(expected).replace(/\\ /g, "\\s*")}(?=$|[\\s|,;:)\\-])`, "i");
+    const match = normalizeUnitText(afterValue).match(pattern);
+    if (match) {
+      return {
+        unit: marker.unit,
+        rawUnit: afterValue.slice(0, match[0].length).trim(),
+        valid: true,
+      };
+    }
+  }
+
+  const rawMatch = afterValue.match(/^([A-Za-zµμ%/.\d^+-]{1,20})/);
+  return {
+    unit: rawMatch ? rawMatch[1] : "",
+    rawUnit: rawMatch ? rawMatch[1] : "",
+    valid: false,
+  };
+}
+
+function isPhysiologicallyRealistic(value, marker, reportRange) {
+  if (!Number.isFinite(value) || value < 0) return false;
+  if (reportRange && (typeof reportRange.min === "number" || typeof reportRange.max === "number")) {
+    const lower = typeof reportRange.min === "number" ? Math.max(0, reportRange.min / 10) : 0;
+    const upper = typeof reportRange.max === "number" ? reportRange.max * 20 + 10 : 100000;
+    return value >= lower && value <= upper;
+  }
+
+  const lower = typeof marker.min === "number" ? Math.max(0, marker.min / 10) : 0;
+  const upper = typeof marker.max === "number" ? marker.max * 20 + 10 : 100000;
+  return value >= lower && value <= upper;
+}
+
+function statusFromRange(value, prefix, reportRange) {
+  if (!reportRange) return "uncertain";
+
+  if (typeof reportRange.min === "number" && value < reportRange.min) return "low";
+  if (typeof reportRange.max === "number" && value > reportRange.max) return "high";
+  if (prefix === "<" && typeof reportRange.max === "number" && value <= reportRange.max) return "normal";
+  if (prefix === ">" && typeof reportRange.min === "number" && value >= reportRange.min) return "normal";
+  return "normal";
+}
+
+function extractNumberAfterAlias(row, alias, marker) {
   if (STOP_WORDS.has(alias.toLowerCase())) return null;
+
+  const line = typeof row === "string" ? row : row.text;
+  const sourcePage = typeof row === "string" ? 1 : row.page;
 
   if (alias.toLowerCase() === "hb" && (line.toLowerCase().includes("a1c") || line.toLowerCase().includes("glyc") || line.toLowerCase().includes("avg") || line.toLowerCase().includes("estimat"))) {
     return null;
   }
 
-  const pattern = new RegExp(aliasPattern(alias), "i");
+  const pattern = new RegExp(rowAliasPattern(alias), "i");
   const match = line.match(pattern);
   if (!match) return null;
 
   const tail = line.slice((match.index || 0) + match[0].length);
   const ranges = getReferenceRangeMatches(tail);
   const reportRange = parseReferenceFromTail(tail);
-  const result = pickResultFromTail(tail, ranges);
-  if (!result) return null;
+  const candidates = getResultCandidates(tail, ranges);
+
+  if (candidates.length !== 1) {
+    return {
+      status: "uncertain",
+      confidence: 70,
+      reason: "ambiguous extraction",
+      raw: line.trim(),
+      source_page: sourcePage || 0,
+      page: sourcePage || 0,
+    };
+  }
+
+  const result = candidates[0];
+  const unit = extractUnitAfterValue(tail, result, marker);
+  const explicitFlag = extractExplicitFlag(tail);
+  const realistic = isPhysiologicallyRealistic(result.value, marker, reportRange);
+
+  let confidence = 100;
+  let status = explicitFlag || statusFromRange(result.value, result.prefix, reportRange);
+  let reason = "";
+
+  if (!unit.valid) {
+    confidence = Math.min(confidence, 90);
+    reason = "unit validation failed";
+  }
+  if (!reportRange && !explicitFlag) {
+    confidence = Math.min(confidence, 90);
+    reason = reason || "missing report reference range or flag";
+  }
+  if (!sourcePage) {
+    confidence = Math.min(confidence, 90);
+    reason = reason || "source page unavailable";
+  }
+  if (!realistic) {
+    confidence = Math.min(confidence, 70);
+    reason = "physiological validation failed";
+  }
+  if (confidence < 95) {
+    status = "uncertain";
+  }
 
   return {
     prefix: result.prefix,
     value: result.value,
+    valueText: result.valueText,
+    unit: unit.unit,
+    rawUnit: unit.rawUnit,
     raw: line.trim(),
     reportRange,
+    abnormalFlag: explicitFlag,
+    status,
+    confidence,
+    reason,
+    source_page: sourcePage || 0,
+    page: sourcePage || 0,
+    valid: confidence >= 95,
   };
 }
 
-function inferStatus(value, marker, reportRange) {
-  const min = typeof reportRange?.min === "number" ? reportRange.min : marker.min;
-  const max = typeof reportRange?.max === "number" ? reportRange.max : marker.max;
-  if (typeof min === "number" && value < min) return "Low";
-  if (typeof max === "number" && value > max) return "High";
-  return "Normal";
-}
-
-function buildRange(marker, reportRange) {
+function buildRange(marker, reportRange, unitOverride = marker.unit) {
   if (reportRange?.text) {
-    return `${reportRange.text} ${marker.unit}`.trim();
+    return `${reportRange.text} ${unitOverride || ""}`.trim();
   }
-  if (typeof marker.min === "number" && typeof marker.max === "number") {
-    return `${marker.min}-${marker.max} ${marker.unit}`;
-  }
-  if (typeof marker.max === "number") return `< ${marker.max} ${marker.unit}`;
-  if (typeof marker.min === "number") return `> ${marker.min} ${marker.unit}`;
-  return "Reference varies";
+  return "";
 }
 
 export function generateFindingsGroups(vitals) {
@@ -1091,66 +1208,37 @@ export function analyzeLabReport(rawText) {
   const seen = new Set();
 
   for (const marker of LAB_MARKERS) {
-    if (marker.isQualitative) {
-      let foundQualitative = null;
-      for (const alias of marker.aliases) {
-        const markerLines = findMarkerLines(lines, alias);
-        if (markerLines.length === 0) continue;
-        
-        for (const line of markerLines) {
-          const extracted = extractQualitativeValue(line, alias, marker);
-          if (extracted) {
-            foundQualitative = extracted;
-            break;
-          }
-        }
-        if (foundQualitative) break;
-      }
-      if (foundQualitative) {
-        vitals.push({
-          name: marker.name,
-          value: foundQualitative.value,
-          numericValue: null,
-          unit: "",
-          range: "Negative",
-          status: foundQualitative.status,
-          explanation: foundQualitative.explanation,
-          possibleConditions: foundQualitative.possibleConditions,
-          sourceSnippet: foundQualitative.raw
-        });
-        seen.add(marker.name);
-      }
-      continue;
-    }
-
     for (const alias of marker.aliases) {
       const markerLines = findMarkerLines(lines, alias);
       if (markerLines.length === 0 || seen.has(marker.name)) continue;
 
       const found = markerLines
-        .map(line => extractNumberAfterAlias(line, alias))
-        .find(result => result && !Number.isNaN(result.value));
+        .map(row => extractNumberAfterAlias(row, alias, marker))
+        .find(result => result && (result.status === "uncertain" || !Number.isNaN(result.value)));
       if (!found) continue;
 
-      const status = inferStatus(found.value, marker, found.reportRange);
-      const conditionHints = status === "Low"
-        ? marker.low || []
-        : status === "High"
-          ? marker.high || []
-          : [];
+      const resultValue = found.valueText || "";
+      const rowUnit = found.rawUnit || found.unit || "";
+      const referenceRange = buildRange(marker, found.reportRange, rowUnit);
 
       vitals.push({
+        test_name: marker.name,
         name: marker.name,
-        value: `${found.prefix}${found.value} ${marker.unit}`.trim(),
+        value: resultValue,
         numericValue: found.value,
-        unit: marker.unit,
-        range: buildRange(marker, found.reportRange),
-        status,
-        explanation: status === "Normal"
-          ? `${marker.name} is within the reference range used for this analysis.`
-          : `${marker.name} is ${status.toLowerCase()} compared with the reference range used for this analysis.`,
-        possibleConditions: conditionHints,
+        unit: rowUnit,
+        reference_range: referenceRange,
+        range: referenceRange,
+        abnormal_flag: found.abnormalFlag || "",
+        status: found.status || "uncertain",
+        source_page: found.source_page || 0,
+        sourcePage: found.source_page || 0,
+        confidence: found.confidence || 0,
+        reason: found.reason || "",
+        valid: found.valid === true,
         sourceSnippet: found.raw,
+        source_row: found.raw,
+        possibleConditions: [],
       });
       seen.add(marker.name);
       break;
@@ -1165,70 +1253,65 @@ export function analyzeLabReport(rawText) {
 }
 
 export function buildAnalysis(vitals, rawText) {
-  const abnormal = vitals.filter(vital => vital.status !== "Normal");
-  const normal = vitals.filter(vital => vital.status === "Normal");
-  const possibleConditions = [...new Set(abnormal.flatMap(vital => vital.possibleConditions || []))];
-  const findingsGroups = generateFindingsGroups(vitals);
+  const confirmedAbnormal = vitals.filter(vital =>
+    ["high", "low", "critical"].includes(String(vital.status || "").toLowerCase())
+    && Number(vital.confidence || 0) >= 95
+    && Number(vital.source_page || vital.sourcePage || 0) > 0
+  );
+  const normal = vitals.filter(vital => String(vital.status || "").toLowerCase() === "normal");
+  const uncertain = vitals.filter(vital => String(vital.status || "").toLowerCase() === "uncertain");
 
   if (!String(rawText || "").trim()) {
     return {
       headline: "No readable report text found",
-      conclusion: "No readable lab values were found. Add the key result values manually if this is a scanned report.",
+      conclusion: "No readable lab result rows were found.",
       abnormalCount: 0,
       normalCount: 0,
+      uncertainCount: 0,
       abnormalResults: [],
       possibleConditions: [],
       findingsGroups: [],
-      recommendations: ["Ask the lab or hospital for a text-searchable PDF if the report is a scanned image."],
-      disclaimer: "This AI-assisted summary is not a diagnosis. Confirm results with a qualified clinician.",
+      recommendations: [],
+      disclaimer: "Only row-validated results with confidence of 95 or higher are displayed as abnormal alerts.",
     };
   }
 
   if (!vitals.length) {
     return {
       headline: "No known lab markers detected",
-      conclusion: "The report text was read, but no supported lab values were confidently extracted.",
+      conclusion: "The report text was read, but no supported lab result row passed extraction.",
       abnormalCount: 0,
       normalCount: 0,
+      uncertainCount: 0,
       abnormalResults: [],
       possibleConditions: [],
       findingsGroups: [],
-      recommendations: ["Add the missing result values manually if the report layout prevented extraction."],
-      disclaimer: "This AI-assisted summary is not a diagnosis. Confirm results with a qualified clinician.",
+      recommendations: [],
+      disclaimer: "Only row-validated results with confidence of 95 or higher are displayed as abnormal alerts.",
     };
   }
 
-  const abnormalText = abnormal
-    .slice(0, 5)
-    .map(vital => `${vital.name} is ${vital.status.toLowerCase()} (${vital.value}; reference ${vital.range})`)
-    .join("; ");
-
   return {
-    headline: abnormal.length
-      ? `${abnormal.length} result${abnormal.length === 1 ? "" : "s"} need attention`
-      : "Detected values are within usual ranges",
-    conclusion: abnormal.length
-      ? `${abnormalText}. These findings may need clinical correlation with symptoms, medicines, age, and medical history.`
-      : `I detected ${normal.length} lab value${normal.length === 1 ? "" : "s"}, and all were within the usual adult reference ranges available to this analyzer.`,
-    abnormalCount: abnormal.length,
+    headline: confirmedAbnormal.length
+      ? `${confirmedAbnormal.length} confirmed abnormal result${confirmedAbnormal.length === 1 ? "" : "s"}`
+      : "No confirmed abnormal alerts",
+    conclusion: `${vitals.length} row-validated result${vitals.length === 1 ? "" : "s"} extracted; ${uncertain.length} marked uncertain.`,
+    abnormalCount: confirmedAbnormal.length,
     normalCount: normal.length,
-    abnormalResults: abnormal.map(vital => ({
-      name: vital.name,
+    uncertainCount: uncertain.length,
+    abnormalResults: confirmedAbnormal.map(vital => ({
+      test_name: vital.test_name || vital.name,
       value: vital.value,
-      range: vital.range,
+      unit: vital.unit,
+      reference_range: vital.reference_range || vital.range,
       status: vital.status,
-      possibleConditions: vital.possibleConditions || [],
+      source_page: vital.source_page || vital.sourcePage || 0,
+      confidence: vital.confidence || 0,
     })),
-    possibleConditions,
-    findingsGroups,
-    recommendations: abnormal.length
-      ? [
-        "Review abnormal values with a doctor instead of self-diagnosing.",
-        "Compare with previous reports to see whether values are improving or worsening.",
-        "Seek urgent care for severe symptoms, very high potassium, severe anemia, chest pain, breathing difficulty, or confusion.",
-      ]
-      : ["Keep this report for trend comparison with future tests."],
-    disclaimer: "This AI-assisted summary is not a diagnosis. It highlights patterns and possible follow-up areas only.",
+    possibleConditions: [],
+    findingsGroups: [],
+    recommendations: [],
+    disclaimer: "Only row-validated results with confidence of 95 or higher are displayed as abnormal alerts.",
   };
 }
 
@@ -1239,7 +1322,10 @@ export async function extractTextFromFile(file) {
   const isTextLike = file.type.startsWith("text/")
     || ["txt", "csv", "tsv", "json", "xml"].includes(extension);
 
-  if (isTextLike) return file.text();
+  if (isTextLike) {
+    const text = await file.text();
+    return text.trim() ? `[[PAGE:1]]\n${text}` : "";
+  }
 
   if (["png", "jpg", "jpeg", "webp", "heic"].includes(extension) || file.type.startsWith("image/")) {
     return "";
@@ -1249,6 +1335,8 @@ export async function extractTextFromFile(file) {
     const buffer = await file.slice(0, MAX_PDF_PARSE_BYTES).arrayBuffer();
     const bytes = new Uint8Array(buffer);
     const binary = new TextDecoder("latin1").decode(bytes);
+    const detectedPageCount = (binary.match(/\/Type\s*\/Page\b/g) || []).length;
+    const sourcePage = detectedPageCount <= 1 ? 1 : 0;
 
     const candidates = [];
     const textMatches = binary.match(/\(([^()]{2,})\)\s*Tj/g) || [];
@@ -1273,12 +1361,14 @@ export async function extractTextFromFile(file) {
       .join("")
       .replace(/\s+/g, " ");
 
-    return (candidates.join("\n") || fallback)
+    const extracted = (candidates.join("\n") || fallback)
       .replace(/\\n/g, "\n")
       .replace(/\\r/g, "\n")
       .replace(/\\t/g, " ")
       .replace(/\\\\/g, "\\")
       .trim();
+
+    return extracted ? `[[PAGE:${sourcePage}]]\n${extracted}` : "";
   }
 
   return "";

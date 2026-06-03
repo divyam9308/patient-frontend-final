@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import { api } from "../utils/api.js";
-import { analyzeLabReport, extractTextFromFile, generateFindingsGroups } from "../utils/labReportAnalyzer.js";
+import { analyzeLabReport, extractTextFromFile } from "../utils/labReportAnalyzer.js";
 import "./Dashboard.css";
 import "./MedicalRecords.css";
 
@@ -218,20 +218,28 @@ export default function MedicalRecords() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const statusText = (status) => String(status || "").toLowerCase();
+  const displayStatus = (status) => {
+    const value = statusText(status);
+    return value ? value.charAt(0).toUpperCase() + value.slice(1) : "Uncertain";
+  };
+  const sourcePage = (vital) => Number(vital.source_page || vital.sourcePage || 0);
+  const confidence = (vital) => Number(vital.confidence || 0);
+  const isConfirmedAbnormal = (vital) =>
+    ["high", "low", "critical"].includes(statusText(vital.status))
+    && confidence(vital) >= 95
+    && sourcePage(vital) > 0;
+
   const trendItems = records
     .flatMap(record => (record.vitals || []).map(vital => ({ ...vital, recordName: record.name, recordDate: record.date })))
-    .filter(vital => vital.name && vital.value)
-    .sort((a, b) => (a.status === "Normal") - (b.status === "Normal"))
+    .filter(vital => vital.name && vital.value && isConfirmedAbnormal(vital))
     .slice(0, 10);
 
-  const abnormalPreview = parsedVitalsPreview.filter(vital => vital.status !== "Normal");
+  const abnormalPreview = parsedVitalsPreview.filter(isConfirmedAbnormal);
   const abnormalRecordVitals = selectedRecord
-    ? (selectedRecord.vitals || []).filter(vital => vital.status !== "Normal")
+    ? (selectedRecord.vitals || []).filter(isConfirmedAbnormal)
     : [];
-
-  const selectedRecordFindings = selectedRecord
-    ? (selectedRecord.analysis?.findingsGroups || generateFindingsGroups(selectedRecord.vitals || []))
-    : [];
+  const selectedRecordFindings = [];
 
   return (
     <DashboardLayout activeTab="records">
@@ -421,14 +429,14 @@ export default function MedicalRecords() {
                     <div className="mr-trend-item" key={`${vital.recordName}-${vital.name}-${index}`}>
                       <div className="mr-trend-top">
                         <span className="mr-trend-label">{vital.name}</span>
-                        <span className={`mr-trend-status ${vital.status === "Normal" ? "normal" : "alert"}`}>
-                          {vital.status}
+                        <span className={`mr-trend-status ${statusText(vital.status)}`}>
+                          {displayStatus(vital.status)}
                         </span>
                       </div>
                       <div className="mr-trend-middle">
-                        <span className="mr-trend-value">{vital.value}</span>
-                        <span className={vital.status === "Normal" ? "mr-trend-change down" : "mr-trend-change up-bad"}>
-                          {vital.status === "Normal" ? "Within range" : "Needs review"}
+                        <span className="mr-trend-value">{vital.value} {vital.unit || ""}</span>
+                        <span className="mr-trend-change up-bad">
+                          Confirmed row match
                         </span>
                       </div>
                       <div className="mr-sparkline-wrap">
@@ -437,8 +445,8 @@ export default function MedicalRecords() {
                           <div
                             className="mr-spark-bar-fill"
                             style={{
-                              width: vital.status === "Normal" ? "75%" : "100%",
-                              background: vital.status === "Normal" ? "var(--green-cta)" : "var(--red)",
+                              width: "100%",
+                              background: "var(--red)",
                             }}
                           />
                         </div>
@@ -592,7 +600,7 @@ export default function MedicalRecords() {
                     {parseError && <div className="mr-parse-error">{parseError}</div>}
                   </div>
 
-                  {parsedVitalsPreview.length > 0 && (
+                  {false && parsedVitalsPreview.length > 0 && (
                     <div className="mr-ai-preview-card">
                       <div className="mr-ai-preview-title">
                         {abnormalPreview.length > 0 ? `⚠️ ${abnormalPreview.length} Abnormal Level${abnormalPreview.length === 1 ? '' : 's'} Detected` : '✅ All Detected Levels Normal'}
@@ -626,6 +634,41 @@ export default function MedicalRecords() {
                         </div>
                       ) : (
                         <p style={{ fontSize: 13, color: 'var(--text-mid)', margin: '8px 0 0' }}>No abnormal supported lab levels were detected from the readable values.</p>
+                      )}
+                    </div>
+                  )}
+                  
+                  {parsedVitalsPreview.length > 0 && (
+                    <div className="mr-ai-preview-card">
+                      <div className="mr-ai-preview-title">
+                        {abnormalPreview.length > 0
+                          ? `${abnormalPreview.length} Confirmed Abnormal Level${abnormalPreview.length === 1 ? "" : "s"}`
+                          : "No Confirmed Abnormal Alerts"}
+                      </div>
+                      {abnormalPreview.length > 0 ? (
+                        <div className="mr-abnormal-list">
+                          {abnormalPreview.map((vital, index) => (
+                            <div key={`${vital.name}-${index}`} className="mr-abnormal-item-v2">
+                              <div className="mr-abnormal-item-header">
+                                <strong className="mr-abnormal-name">{vital.test_name || vital.name}</strong>
+                                <span className={`mr-vitals-status-pill ${statusText(vital.status)}`}>
+                                  {displayStatus(vital.status)}
+                                </span>
+                              </div>
+                              <div className="mr-abnormal-values-row">
+                                <span className="mr-abnormal-current-val">Value: <b>{vital.value} {vital.unit || ""}</b></span>
+                                <span className="mr-abnormal-ref-val">Report Range: {vital.reference_range || vital.range}</span>
+                              </div>
+                              <small className="mr-source-trace">
+                                Page {sourcePage(vital)} | Confidence {confidence(vital)}%
+                              </small>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p style={{ fontSize: 13, color: "var(--text-mid)", margin: "8px 0 0" }}>
+                          No abnormal alert is shown unless the exact result is traced to a source row with confidence 95 or higher.
+                        </p>
                       )}
                     </div>
                   )}
@@ -770,7 +813,7 @@ export default function MedicalRecords() {
                     </div>
                   ) : (
                     <>
-                      {abnormalRecordVitals.length > 0 && (
+                      {false && abnormalRecordVitals.length > 0 && (
                         <div className="mr-viewer-section">
                           <span className="mr-viewer-label">Abnormal Lab Levels</span>
                           <table className="mr-vitals-table">
@@ -800,6 +843,45 @@ export default function MedicalRecords() {
                       )}
                     </>
                   )}
+
+                  <div className="mr-viewer-section">
+                    <span className="mr-viewer-label">Confirmed Abnormal Lab Rows</span>
+                    <table className="mr-vitals-table">
+                      <thead>
+                        <tr>
+                          <th>Test</th>
+                          <th>Value</th>
+                          <th>Unit</th>
+                          <th>Report Range</th>
+                          <th>Source</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {abnormalRecordVitals.length === 0 ? (
+                          <tr>
+                            <td colSpan="5" style={{ color: "var(--text-muted)" }}>
+                              No abnormal alert is shown because no row-validated result met the 95 confidence rule.
+                            </td>
+                          </tr>
+                        ) : (
+                          abnormalRecordVitals.map((v, i) => (
+                            <tr key={i}>
+                              <td style={{ fontWeight: 600 }}>{v.test_name || v.name}</td>
+                              <td>{v.value}</td>
+                              <td>{v.unit || "-"}</td>
+                              <td>
+                                <span style={{ color: "var(--text-muted)" }}>{v.reference_range || v.range || "-"} </span>
+                                <span className={`mr-vitals-status-pill ${statusText(v.status)}`}>
+                                  {displayStatus(v.status)}
+                                </span>
+                              </td>
+                              <td>Page {sourcePage(v)} | {confidence(v)}%</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
 
                   <div className="mr-viewer-section">
                     <span className="mr-viewer-label">Clinical Comments / Summary</span>
