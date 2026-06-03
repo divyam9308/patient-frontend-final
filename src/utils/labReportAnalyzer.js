@@ -586,7 +586,9 @@ function extractLines(rawText) {
 
 function findMarkerLines(lines, alias) {
   const pattern = new RegExp(rowAliasPattern(alias), "i");
-  return lines.filter(row => pattern.test(row.text));
+  return lines
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => pattern.test(row.text));
 }
 
 function getReferenceRangeMatches(tail) {
@@ -809,11 +811,21 @@ function statusFromRange(value, prefix, reportRange) {
   return "normal";
 }
 
-function extractNumberAfterAlias(row, alias, marker) {
+function extractNumberAfterAlias(matchObj, alias, marker, lines) {
   if (STOP_WORDS.has(alias.toLowerCase())) return null;
 
-  const line = typeof row === "string" ? row : row.text;
+  const row = matchObj.row || matchObj;
+  const index = matchObj.index;
+  let line = typeof row === "string" ? row : row.text;
   const sourcePage = typeof row === "string" ? 1 : row.page;
+
+  if (lines && typeof index === "number") {
+    for (let i = 1; i <= 3; i++) {
+      if (lines[index + i]) {
+        line += "  " + (typeof lines[index + i] === "string" ? lines[index + i] : lines[index + i].text);
+      }
+    }
+  }
 
   if (alias.toLowerCase() === "hb" && (line.toLowerCase().includes("a1c") || line.toLowerCase().includes("glyc") || line.toLowerCase().includes("avg") || line.toLowerCase().includes("estimat"))) {
     return null;
@@ -828,7 +840,7 @@ function extractNumberAfterAlias(row, alias, marker) {
   const reportRange = parseReferenceFromTail(tail);
   const candidates = getResultCandidates(tail, ranges);
 
-  if (candidates.length !== 1) {
+  if (candidates.length === 0) {
     return {
       status: "uncertain",
       confidence: 70,
@@ -1214,7 +1226,7 @@ export function analyzeLabReport(rawText) {
       if (markerLines.length === 0 || seen.has(marker.name)) continue;
 
       const found = markerLines
-        .map(row => extractNumberAfterAlias(row, alias, marker))
+        .map(matchObj => extractNumberAfterAlias(matchObj, alias, marker, lines))
         .find(result => result && (result.status === "uncertain" || !Number.isNaN(result.value)));
       if (!found) continue;
 
