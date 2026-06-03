@@ -310,6 +310,38 @@ ADD COLUMN IF NOT EXISTS source TEXT,
 ADD COLUMN IF NOT EXISTS dosage_form TEXT,
 ADD COLUMN IF NOT EXISTS strength TEXT;
 
+-- ────────────────────────────────────────────────
+-- 11. MEDICINE BATCHES TABLE
+-- ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS medicine_batches (
+  id                  UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  medicine_name       TEXT NOT NULL,
+  brand_name          TEXT NOT NULL,
+  manufacturer        TEXT NOT NULL,
+  batch_code          TEXT UNIQUE NOT NULL,
+  serial_number       TEXT,
+  barcode_value       TEXT,
+  manufacturing_date  DATE NOT NULL,
+  expiry_date         DATE NOT NULL,
+  dosage_form         TEXT NOT NULL,
+  strength            TEXT NOT NULL,
+  country             TEXT NOT NULL,
+  source              TEXT NOT NULL,
+  verification_status TEXT DEFAULT 'verified',
+  created_at          TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at          TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_medicine_batches_code ON medicine_batches(batch_code);
+
+-- Alter existing medicine_verifications
+ALTER TABLE medicine_verifications 
+ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'unknown',
+ADD COLUMN IF NOT EXISTS brand_name TEXT,
+ADD COLUMN IF NOT EXISTS source TEXT,
+ADD COLUMN IF NOT EXISTS dosage_form TEXT,
+ADD COLUMN IF NOT EXISTS strength TEXT;
+
 -- ─────────────────────────────────────────────────
 -- HOW TO RUN: Supabase Dashboard → SQL Editor → New Query → paste → Run
 -- ─────────────────────────────────────────────────

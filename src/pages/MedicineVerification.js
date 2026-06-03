@@ -189,6 +189,18 @@ export default function MedicineVerification() {
                     <strong>{scanResult.source || 'Unknown Database'}</strong>
                   </div>
                 </div>
+                <p className="mv-result-desc" style={{ 
+                    color: scanResult.status === 'recalled' ? '#991b1b' : 
+                           scanResult.status === 'expired' ? '#9a3412' : 
+                           scanResult.status === 'warning' ? '#854d0e' : '#065f46'
+                  }}>
+                  {scanResult.status === 'verified'
+                    ? "This drug batch matches verified manufacturer manufacturing records and has been registered on the national database."
+                    : scanResult.status === 'expired'
+                    ? "This medicine batch exists in our records but is expired. Do not use."
+                    : scanResult.status === 'recalled'
+                    ? "This medicine batch exists but has a recall/safety warning. Contact a medical professional immediately."
+                    : "No matching record found for this batch identifier. This product may be counterfeited or unverified. Do not consume without professional advice."}
                 <p className="mv-result-desc" style={{
                   color: scanResult.status === 'recalled' ? '#991b1b' :
                     scanResult.status === 'expired' ? '#9a3412' :
@@ -236,6 +248,21 @@ export default function MedicineVerification() {
                       Checked: {m.date}
                     </div>
                   </div>
+                  <div className={`mv-pill ${
+                    m.status === 'verified' ? 'verified' : 
+                    (m.status === 'recalled' || m.status === 'expired' || m.status === 'warning') ? 'fake' : 'fake'
+                  }`} style={{
+                    backgroundColor: m.status === 'recalled' ? '#fee2e2' : 
+                                     m.status === 'expired' ? '#ffedd5' : 
+                                     m.status === 'warning' ? '#fef9c3' : undefined,
+                    color: m.status === 'recalled' ? '#991b1b' : 
+                           m.status === 'expired' ? '#9a3412' : 
+                           m.status === 'warning' ? '#854d0e' : undefined,
+                    border: 'none'
+                  }}>
+                    {m.status === 'verified' ? 'Verified' : 
+                     m.status === 'recalled' ? 'Recalled' : 
+                     m.status === 'expired' ? 'Expired' : 'Unverified'}
                   <div className={`mv-pill ${m.status === 'verified' ? 'verified' :
                       (m.status === 'recalled' || m.status === 'expired' || m.status === 'warning') ? 'fake' : 'fake'
                     }`} style={{

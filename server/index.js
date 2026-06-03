@@ -34,6 +34,9 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '.env') });
+console.log('[Backend Startup] SUPABASE_URL:', process.env.SUPABASE_URL);
+console.log('[Backend Startup] JWT_SECRET exists:', !!process.env.JWT_SECRET);
+console.log('[Backend Startup] GOOGLE_CLIENT_ID exists:', !!process.env.GOOGLE_CLIENT_ID);
 
 const requiredEnv = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'JWT_SECRET'];
 const missingEnv = requiredEnv.filter((key) => !process.env[key]);

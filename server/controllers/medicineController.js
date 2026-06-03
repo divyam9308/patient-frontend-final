@@ -104,6 +104,17 @@ export const verifyMedicine = async (req, res) => {
     }
 
     const code = batchCode.toUpperCase().trim();
+    let verified = false;
+    let finalName = name || `Unknown Batch (${code})`;
+    let mfr = "Unverified / Fake Source";
+    let expiry = "—";
+    let color = "#fffbeb";
+    let icon = "⚠️";
+    let status = "warning";
+    let brandName = null;
+    let source = "Unknown";
+    let dosageForm = null;
+    let strength = null;
     let verification = buildLegacyVerification(code, name);
 
     // Database lookup
@@ -114,6 +125,16 @@ export const verifyMedicine = async (req, res) => {
       .maybeSingle();
 
     if (lookupError) {
+      return res.status(500).json({ error: lookupError.message });
+    }
+
+    if (batchMatch) {
+      finalName = batchMatch.medicine_name;
+      mfr = batchMatch.manufacturer;
+      brandName = batchMatch.brand_name;
+      source = batchMatch.source;
+      dosageForm = batchMatch.dosage_form;
+      strength = batchMatch.strength;
       if (!isMissingTableError(lookupError, 'medicine_batches')) {
         console.warn('[Medicine Verification] Falling back to legacy verification after lookup error:', lookupError.message);
       }
@@ -130,6 +151,23 @@ export const verifyMedicine = async (req, res) => {
       // Handle Date correctly
       const expDate = new Date(batchMatch.expiry_date);
       const now = new Date();
+      expiry = expDate.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+      
+      if (batchMatch.verification_status === 'recalled') {
+        verified = false;
+        status = 'recalled';
+        color = '#fee2e2'; // Light red
+        icon = '🚨';
+      } else if (expDate < now || batchMatch.verification_status === 'expired') {
+        verified = false;
+        status = 'expired';
+        color = '#ffedd5'; // Light orange
+        icon = '⏳';
+      } else {
+        verified = true;
+        status = 'verified';
+        color = '#e8f5ee'; // Light green
+        icon = '✅';
       verification.expiry = expDate.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
       
       if (batchMatch.verification_status === 'recalled') {
@@ -148,6 +186,11 @@ export const verifyMedicine = async (req, res) => {
         verification.color = '#e8f5ee';
         verification.icon = '✅';
       }
+    } else {
+      status = 'warning';
+      color = '#fffbeb'; // Light yellow
+      icon = '⚠️';
+      verified = false;
     }
 
     const baseInsert = {
@@ -169,6 +212,19 @@ export const verifyMedicine = async (req, res) => {
 
     let { data: newVerification, error } = await supabase
       .from('medicine_verifications')
+      .insert({
+        patient_id: patientId,
+        name: finalName,
+        manufacturer: mfr,
+        expiry,
+        batch: code,
+        verified,
+        status,
+        brand_name: brandName,
+        source,
+        dosage_form: dosageForm,
+        strength
+      })
       .insert(enrichedInsert)
       .select()
       .single();
@@ -198,6 +254,13 @@ export const verifyMedicine = async (req, res) => {
       batch: newVerification.batch,
       verified: newVerification.verified,
       date: formattedDate,
+      icon,
+      color,
+      status: newVerification.status,
+      brandName: newVerification.brand_name,
+      source: newVerification.source,
+      dosageForm: newVerification.dosage_form,
+      strength: newVerification.strength
       icon: verification.icon,
       color: verification.color,
       status: newVerification.status || verification.status,
