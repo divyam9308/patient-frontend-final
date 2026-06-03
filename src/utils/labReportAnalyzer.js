@@ -1349,16 +1349,7 @@ export async function extractTextFromFile(file) {
       if (pieces.length) candidates.push(pieces.join(""));
     });
 
-    const fallback = binary
-      .split("")
-      .map((character) => {
-        const code = character.charCodeAt(0);
-        return code === 9 || code === 10 || code === 13 || (code >= 32 && code <= 126)
-          ? character
-          : " ";
-      })
-      .join("")
-      .replace(/\s+/g, " ");
+    const fallback = binary.replace(/[^\x09\x0A\x0D\x20-\x7E]/g, " ").replace(/\s+/g, " ");
 
     const extracted = (candidates.join("\n") || fallback)
       .replace(/\\n/g, "\n")
