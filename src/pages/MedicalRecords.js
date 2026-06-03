@@ -226,9 +226,7 @@ export default function MedicalRecords() {
   const sourcePage = (vital) => Number(vital.source_page || vital.sourcePage || 0);
   const confidence = (vital) => Number(vital.confidence || 0);
   const isConfirmedAbnormal = (vital) =>
-    ["high", "low", "critical"].includes(statusText(vital.status))
-    && confidence(vital) >= 95
-    && sourcePage(vital) > 0;
+    ["high", "low", "critical"].includes(statusText(vital.status));
 
   const trendItems = records
     .flatMap(record => (record.vitals || []).map(vital => ({ ...vital, recordName: record.name, recordDate: record.date })))
@@ -667,7 +665,7 @@ export default function MedicalRecords() {
                         </div>
                       ) : (
                         <p style={{ fontSize: 13, color: "var(--text-mid)", margin: "8px 0 0" }}>
-                          No abnormal alert is shown unless the exact result is traced to a source row with confidence 95 or higher.
+                          Results are extracted from the report. Please verify with the original document.
                         </p>
                       )}
                     </div>

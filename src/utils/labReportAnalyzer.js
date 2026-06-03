@@ -864,9 +864,10 @@ function extractNumberAfterAlias(row, alias, marker) {
     confidence = Math.min(confidence, 70);
     reason = "physiological validation failed";
   }
-  if (confidence < 95) {
-    status = "uncertain";
-  }
+  // Removed the strict override to "uncertain" to allow returning more results
+  // if (confidence < 95) {
+  //   status = "uncertain";
+  // }
 
   return {
     prefix: result.prefix,
@@ -882,7 +883,7 @@ function extractNumberAfterAlias(row, alias, marker) {
     reason,
     source_page: sourcePage || 0,
     page: sourcePage || 0,
-    valid: confidence >= 95,
+    valid: confidence >= 50,
   };
 }
 
@@ -1255,8 +1256,6 @@ export function analyzeLabReport(rawText) {
 export function buildAnalysis(vitals, rawText) {
   const confirmedAbnormal = vitals.filter(vital =>
     ["high", "low", "critical"].includes(String(vital.status || "").toLowerCase())
-    && Number(vital.confidence || 0) >= 95
-    && Number(vital.source_page || vital.sourcePage || 0) > 0
   );
   const normal = vitals.filter(vital => String(vital.status || "").toLowerCase() === "normal");
   const uncertain = vitals.filter(vital => String(vital.status || "").toLowerCase() === "uncertain");
@@ -1272,7 +1271,7 @@ export function buildAnalysis(vitals, rawText) {
       possibleConditions: [],
       findingsGroups: [],
       recommendations: [],
-      disclaimer: "Only row-validated results with confidence of 95 or higher are displayed as abnormal alerts.",
+      disclaimer: "Results are extracted from the report. Please verify with the original document.",
     };
   }
 
@@ -1287,15 +1286,15 @@ export function buildAnalysis(vitals, rawText) {
       possibleConditions: [],
       findingsGroups: [],
       recommendations: [],
-      disclaimer: "Only row-validated results with confidence of 95 or higher are displayed as abnormal alerts.",
+      disclaimer: "Results are extracted from the report. Please verify with the original document.",
     };
   }
 
   return {
     headline: confirmedAbnormal.length
-      ? `${confirmedAbnormal.length} confirmed abnormal result${confirmedAbnormal.length === 1 ? "" : "s"}`
-      : "No confirmed abnormal alerts",
-    conclusion: `${vitals.length} row-validated result${vitals.length === 1 ? "" : "s"} extracted; ${uncertain.length} marked uncertain.`,
+      ? `${confirmedAbnormal.length} abnormal result${confirmedAbnormal.length === 1 ? "" : "s"} detected`
+      : "No abnormal results detected",
+    conclusion: `${vitals.length} result${vitals.length === 1 ? "" : "s"} extracted; ${uncertain.length} marked uncertain.`,
     abnormalCount: confirmedAbnormal.length,
     normalCount: normal.length,
     uncertainCount: uncertain.length,
@@ -1311,7 +1310,7 @@ export function buildAnalysis(vitals, rawText) {
     possibleConditions: [],
     findingsGroups: [],
     recommendations: [],
-    disclaimer: "Only row-validated results with confidence of 95 or higher are displayed as abnormal alerts.",
+    disclaimer: "Results are extracted from the report. Please verify with the original document.",
   };
 }
 
