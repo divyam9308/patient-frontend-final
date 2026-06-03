@@ -248,7 +248,7 @@ export const getAppointments = async (req, res) => {
       const docHosp = a.doctor_hospitals;
       const dateObj = new Date(`${a.appointment_date}T${a.appointment_time}`);
       const reasonMeta = unpackReason(a.reason);
-      
+
       return {
         id: a.id,
         doc: docHosp?.doctors?.name,
@@ -281,7 +281,7 @@ export const getAppointments = async (req, res) => {
 
     const formattedEmergencies = (emergencyData || []).map(e => {
       const dateObj = new Date(e.requested_arrival_time || e.created_at);
-      
+
       const tz = 'Asia/Kolkata';
       const parts = new Intl.DateTimeFormat('en-US', {
         timeZone: tz,
@@ -458,7 +458,7 @@ export const updateAppointment = async (req, res) => {
         .eq('patient_id', req.user.id)
         .select()
         .maybeSingle();
-        
+
       if (eError) throw eError;
       data = eData;
     } else if (error) {
@@ -481,14 +481,14 @@ export const updateAppointment = async (req, res) => {
 export const deleteAppointment = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Attempt delete on appointments
     await supabase
       .from('appointments')
       .delete()
       .eq('id', id)
       .eq('patient_id', req.user.id);
-      
+
     // Attempt delete on emergency_requests
     await supabase
       .from('emergency_requests')
