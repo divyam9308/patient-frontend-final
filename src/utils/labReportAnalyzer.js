@@ -591,15 +591,29 @@ function findMarkerLines(lines, alias) {
     .filter(({ row }) => pattern.test(row.text));
 }
 
+function isDifferentMarkerLine(line, currentAlias) {
+  const normalizedAlias = currentAlias.toLowerCase();
+  return LAB_MARKERS.some(marker =>
+    marker.aliases.some(alias =>
+      alias.toLowerCase() !== normalizedAlias
+      && new RegExp(rowAliasPattern(alias), "i").test(line)
+    )
+  );
+}
+
 function getReferenceRangeMatches(tail) {
   const ranges = [];
   const rangePattern = /(?:reference|normal|range|ref|interval|bio\.?\s*ref\.?)?\s*:?\s*(-?\d+(?:\.\d+)?)\s*(?:-|to|\u2013|\u2014|â€“|â€”)\s*(-?\d+(?:\.\d+)?)/gi;
   let rangeMatch;
 
   while ((rangeMatch = rangePattern.exec(tail)) !== null) {
+    const min = Number(rangeMatch[1]);
+    const max = Number(rangeMatch[2]);
+    if (min > max) continue;
+
     ranges.push({
-      min: Number(rangeMatch[1]),
-      max: Number(rangeMatch[2]),
+      min,
+      max,
       text: `${rangeMatch[1]}-${rangeMatch[2]}`,
       start: rangeMatch.index,
       end: rangeMatch.index + rangeMatch[0].length,
@@ -647,9 +661,13 @@ function parseReferenceFromTail(tail) {
 
   const rangeMatch = tail.match(/(?:reference|normal|range|ref)?\s*:?\s*(-?\d+(?:\.\d+)?)\s*(?:-|to|–|—)\s*(-?\d+(?:\.\d+)?)/i);
   if (rangeMatch) {
+    const min = Number(rangeMatch[1]);
+    const max = Number(rangeMatch[2]);
+    if (min > max) return null;
+
     return {
-      min: Number(rangeMatch[1]),
-      max: Number(rangeMatch[2]),
+      min,
+      max,
       text: `${rangeMatch[1]}-${rangeMatch[2]}`,
     };
   }
@@ -768,6 +786,14 @@ function extractUnitAfterValue(tail, candidate, marker) {
     .replace(/^(critical|crit|panic|hh|ll|high|low|h|l)(?=$|[\s|,;:)])\s*/i, "");
   const expectedUnits = getExpectedUnits(marker);
 
+  if (/^(?:reference|normal|range|ref|interval|bio\.?\s*ref\.?)(?=$|[\s:])/i.test(afterValue)) {
+    return {
+      unit: "",
+      rawUnit: "",
+      valid: false,
+    };
+  }
+
   for (const expected of expectedUnits) {
     const pattern = new RegExp(`^${escapeRegExp(expected).replace(/\\ /g, "\\s*")}(?=$|[\\s|,;:)\\-])`, "i");
     const match = normalizeUnitText(afterValue).match(pattern);
@@ -782,10 +808,14 @@ function extractUnitAfterValue(tail, candidate, marker) {
 
   const rawMatch = afterValue.match(/^([A-Za-zµμ%/.\d^+-]{1,20})/);
   return {
-    unit: rawMatch ? rawMatch[1] : "",
+    unit: "",
     rawUnit: rawMatch ? rawMatch[1] : "",
     valid: false,
   };
+}
+
+function hasInvalidRawUnit(unit) {
+  return Boolean(unit.rawUnit && !unit.valid);
 }
 
 function isPhysiologicallyRealistic(value, marker, reportRange) {
@@ -822,7 +852,9 @@ function extractNumberAfterAlias(matchObj, alias, marker, lines) {
   if (lines && typeof index === "number") {
     for (let i = 1; i <= 3; i++) {
       if (lines[index + i]) {
-        line += "  " + (typeof lines[index + i] === "string" ? lines[index + i] : lines[index + i].text);
+        const nextLine = typeof lines[index + i] === "string" ? lines[index + i] : lines[index + i].text;
+        if (isDifferentMarkerLine(nextLine, alias)) break;
+        line += "  " + nextLine;
       }
     }
   }
@@ -860,7 +892,7 @@ function extractNumberAfterAlias(matchObj, alias, marker, lines) {
   let status = explicitFlag || statusFromRange(result.value, result.prefix, reportRange);
   let reason = "";
 
-  if (!unit.valid) {
+  if (hasInvalidRawUnit(unit)) {
     confidence = Math.min(confidence, 90);
     reason = "unit validation failed";
   }
@@ -881,6 +913,10 @@ function extractNumberAfterAlias(matchObj, alias, marker, lines) {
   //   status = "uncertain";
   // }
 
+  const valid = realistic
+    && confidence >= 90
+    && !hasInvalidRawUnit(unit);
+
   return {
     prefix: result.prefix,
     value: result.value,
@@ -895,7 +931,7 @@ function extractNumberAfterAlias(matchObj, alias, marker, lines) {
     reason,
     source_page: sourcePage || 0,
     page: sourcePage || 0,
-    valid: confidence >= 50,
+    valid,
   };
 }
 
@@ -1231,7 +1267,7 @@ export function analyzeLabReport(rawText) {
       if (!found) continue;
 
       const resultValue = found.valueText || "";
-      const rowUnit = found.rawUnit || found.unit || "";
+      const rowUnit = found.unit || "";
       const referenceRange = buildRange(marker, found.reportRange, rowUnit);
 
       vitals.push({
@@ -1261,7 +1297,7 @@ export function analyzeLabReport(rawText) {
   return {
     extractedText: rawText || "",
     vitals,
-    analysis: buildAnalysis(vitals, rawText),
+    analysis: buildAnalysis(vitals.filter(vital => vital.valid), rawText),
   };
 }
 
@@ -1343,35 +1379,82 @@ export async function extractTextFromFile(file) {
   }
 
   if (file.type === "application/pdf" || extension === "pdf") {
-    const buffer = await file.slice(0, MAX_PDF_PARSE_BYTES).arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    const binary = new TextDecoder("latin1").decode(bytes);
-    const detectedPageCount = (binary.match(/\/Type\s*\/Page\b/g) || []).length;
-    const sourcePage = detectedPageCount <= 1 ? 1 : 0;
+    // Use pdf.js for proper text extraction (handles font encoding, CMap, etc.)
+    try {
+      const pdfjsLib = await import("pdfjs-dist");
 
-    const candidates = [];
-    const textMatches = binary.match(/\(([^()]{2,})\)\s*Tj/g) || [];
-    textMatches.forEach(match => {
-      candidates.push(match.replace(/^\(/, "").replace(/\)\s*Tj$/, ""));
-    });
+      // Use local worker file copied to public/ to avoid webpack bundling issues
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL}/pdf.worker.min.mjs`;
 
-    const arrayMatches = binary.match(/\[([^\]]+)\]\s*TJ/g) || [];
-    arrayMatches.forEach(match => {
-      const pieces = [...match.matchAll(/\(([^()]*)\)/g)].map(piece => piece[1]);
-      if (pieces.length) candidates.push(pieces.join(""));
-    });
+      const buffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+      const pageTexts = [];
 
-    // eslint-disable-next-line no-control-regex
-    const fallback = binary.replace(/[^\x09\x0A\x0D\x20-\x7E]/g, " ").replace(/\s+/g, " ");
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const content = await page.getTextContent();
 
-    const extracted = (candidates.join("\n") || fallback)
-      .replace(/\\n/g, "\n")
-      .replace(/\\r/g, "\n")
-      .replace(/\\t/g, " ")
-      .replace(/\\\\/g, "\\")
-      .trim();
+        // Group text items by their Y position to reconstruct lines
+        const lineMap = new Map();
+        for (const item of content.items) {
+          if (!item.str || !item.str.trim()) continue;
+          // Round Y to nearest integer to group items on the same line
+          const y = Math.round(item.transform[5]);
+          if (!lineMap.has(y)) lineMap.set(y, []);
+          lineMap.get(y).push({ x: item.transform[4], text: item.str });
+        }
 
-    return extracted ? `[[PAGE:${sourcePage}]]\n${extracted}` : "";
+        // Sort lines by Y (descending since PDF Y goes bottom-up) then items by X
+        const sortedYs = [...lineMap.keys()].sort((a, b) => b - a);
+        const lines = sortedYs.map(y => {
+          const items = lineMap.get(y).sort((a, b) => a.x - b.x);
+          return items.map(i => i.text).join("  ");
+        });
+
+        pageTexts.push(`[[PAGE:${pageNum}]]\n${lines.join("\n")}`);
+      }
+
+      const fullText = pageTexts.join("\n").trim();
+      if (fullText) return fullText;
+    } catch (pdfJsError) {
+      console.warn("pdf.js extraction failed, falling back to regex parser:", pdfJsError);
+    }
+
+    // Fallback: naive regex-based extraction for when pdf.js fails
+    try {
+      const buffer = await file.slice(0, MAX_PDF_PARSE_BYTES).arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      const binary = new TextDecoder("latin1").decode(bytes);
+      const detectedPageCount = (binary.match(/\/Type\s*\/Page\b/g) || []).length;
+      const sourcePage = detectedPageCount <= 1 ? 1 : 0;
+
+      const candidates = [];
+      const textMatches = binary.match(/\(([^()]{2,})\)\s*Tj/g) || [];
+      textMatches.forEach(match => {
+        candidates.push(match.replace(/^\(/, "").replace(/\)\s*Tj$/, ""));
+      });
+
+      const arrayMatches = binary.match(/\[([^\]]+)\]\s*TJ/g) || [];
+      arrayMatches.forEach(match => {
+        const pieces = [...match.matchAll(/\(([^()]*)\)/g)].map(piece => piece[1]);
+        if (pieces.length) candidates.push(pieces.join(""));
+      });
+
+      // eslint-disable-next-line no-control-regex
+      const fallback = binary.replace(/[^\x09\x0A\x0D\x20-\x7E]/g, " ").replace(/\s+/g, " ");
+
+      const extracted = (candidates.join("\n") || fallback)
+        .replace(/\\n/g, "\n")
+        .replace(/\\r/g, "\n")
+        .replace(/\\t/g, " ")
+        .replace(/\\\\/g, "\\")
+        .trim();
+
+      return extracted ? `[[PAGE:${sourcePage}]]\n${extracted}` : "";
+    } catch (fallbackError) {
+      console.warn("Fallback PDF extraction also failed:", fallbackError);
+      return "";
+    }
   }
 
   return "";

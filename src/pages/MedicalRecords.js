@@ -114,11 +114,11 @@ export default function MedicalRecords() {
     setUploading(true);
 
     const reportResult = runAnalysisForText(reportText);
-    const parsedVitals = [...reportResult.vitals];
+    const parsedVitals = reportResult.vitals.filter(vital => vital.valid);
 
     if (newVitalsInput.trim()) {
       const manualResult = analyzeLabReport(newVitalsInput.replace(/,/g, "\n"));
-      manualResult.vitals.forEach((manualVital) => {
+      manualResult.vitals.filter(vital => vital.valid).forEach((manualVital) => {
         const existingIndex = parsedVitals.findIndex(vital => vital.name === manualVital.name);
         if (existingIndex === -1) {
           parsedVitals.push(manualVital);
