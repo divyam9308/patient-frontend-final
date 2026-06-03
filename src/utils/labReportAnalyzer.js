@@ -557,7 +557,7 @@ function escapeRegExp(value) {
 }
 
 function rowAliasPattern(alias) {
-  return `^\\s*(?:\\d+[.)-]?\\s+)?${escapeRegExp(alias)}(?=$|[^A-Za-z0-9])`;
+  return `(?:^|\\s)(?:\\d+[.)-]?\\s+)?${escapeRegExp(alias)}(?=$|[^A-Za-z0-9])`;
 }
 
 function extractLines(rawText) {

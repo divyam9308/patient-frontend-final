@@ -97,7 +97,7 @@ export default function MedicalRecords() {
         if (!text.trim()) {
           setParseError("This file did not expose readable lab values. Add the important values manually below if it is a scanned image.");
         } else if (!result.vitals.length) {
-          setParseError("Readable text was found, but no supported lab values were confidently detected. Add missing values manually below if needed.");
+          setParseError("Readable text was found, but no supported lab values were detected. Add missing values manually below if needed.");
         }
       } catch (err) {
         setParseError(err.message || "Unable to read this file. Add the important values manually below if needed.");
@@ -233,7 +233,7 @@ export default function MedicalRecords() {
     .filter(vital => vital.name && vital.value && isConfirmedAbnormal(vital))
     .slice(0, 10);
 
-  const abnormalPreview = parsedVitalsPreview.filter(isConfirmedAbnormal);
+  const validPreview = parsedVitalsPreview.filter(v => v.valid);
   const abnormalRecordVitals = selectedRecord
     ? (selectedRecord.vitals || []).filter(isConfirmedAbnormal)
     : [];
@@ -639,13 +639,13 @@ export default function MedicalRecords() {
                   {parsedVitalsPreview.length > 0 && (
                     <div className="mr-ai-preview-card">
                       <div className="mr-ai-preview-title">
-                        {abnormalPreview.length > 0
-                          ? `${abnormalPreview.length} Confirmed Abnormal Level${abnormalPreview.length === 1 ? "" : "s"}`
-                          : "No Confirmed Abnormal Alerts"}
+                        {validPreview.length > 0
+                          ? `${validPreview.length} Extracted Lab Value${validPreview.length === 1 ? "" : "s"}`
+                          : "No Extracted Lab Values"}
                       </div>
-                      {abnormalPreview.length > 0 ? (
+                      {validPreview.length > 0 ? (
                         <div className="mr-abnormal-list">
-                          {abnormalPreview.map((vital, index) => (
+                          {validPreview.map((vital, index) => (
                             <div key={`${vital.name}-${index}`} className="mr-abnormal-item-v2">
                               <div className="mr-abnormal-item-header">
                                 <strong className="mr-abnormal-name">{vital.test_name || vital.name}</strong>
