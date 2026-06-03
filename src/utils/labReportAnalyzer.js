@@ -1349,6 +1349,7 @@ export async function extractTextFromFile(file) {
       if (pieces.length) candidates.push(pieces.join(""));
     });
 
+    // eslint-disable-next-line no-control-regex
     const fallback = binary.replace(/[^\x09\x0A\x0D\x20-\x7E]/g, " ").replace(/\s+/g, " ");
 
     const extracted = (candidates.join("\n") || fallback)
