@@ -227,11 +227,16 @@ export default function MedicalRecords() {
   const confidence = (vital) => Number(vital.confidence || 0);
   const isConfirmedAbnormal = (vital) =>
     ["high", "low", "critical"].includes(statusText(vital.status));
+  const vitalValueClass = (status) => `mr-vital-value ${statusText(status) || "uncertain"}`;
 
   const trendItems = records
     .flatMap(record => (record.vitals || []).map(vital => ({ ...vital, recordName: record.name, recordDate: record.date })))
-    .filter(vital => vital.name && vital.value && isConfirmedAbnormal(vital))
-    .slice(0, 10);
+    .filter(vital => vital.name && vital.value && vital.valid !== false);
+  const groupedTrendItems = {
+    normal: trendItems.filter(vital => statusText(vital.status) === "normal"),
+    low: trendItems.filter(vital => statusText(vital.status) === "low"),
+    high: trendItems.filter(vital => ["high", "critical"].includes(statusText(vital.status))),
+  };
 
   const validPreview = parsedVitalsPreview.filter(v => v.valid);
   const abnormalRecordVitals = selectedRecord
@@ -457,6 +462,71 @@ export default function MedicalRecords() {
             </div>
           </div>
         </div>
+
+        <div className="mr-insights-card mr-tracker-section">
+          <div className="mr-insights-header">
+            <h2 className="mr-section-title">Key Vitals Trend Tracker</h2>
+            <p className="mr-insights-subtitle">
+              Aggregated and parsed metrics from your uploaded medical records.
+            </p>
+          </div>
+
+          {trendItems.length === 0 ? (
+            <div className="mr-tracker-empty">
+              <div className="mr-tracker-empty-icon">Vitals</div>
+              <h4>No vitals tracked yet</h4>
+              <p>
+                Once you upload reports containing clinical results, your key metrics will appear here automatically.
+              </p>
+            </div>
+          ) : (
+            <div className="mr-tracker-groups">
+              {[
+                { key: "normal", title: "Normal", items: groupedTrendItems.normal },
+                { key: "low", title: "Low", items: groupedTrendItems.low },
+                { key: "high", title: "High", items: groupedTrendItems.high },
+              ].map(group => (
+                <section className={`mr-tracker-group ${group.key}`} key={group.key}>
+                  <div className="mr-tracker-group-header">
+                    <h3>{group.title}</h3>
+                    <span>{group.items.length}</span>
+                  </div>
+                  {group.items.length === 0 ? (
+                    <p className="mr-tracker-empty-group">No {group.title.toLowerCase()} vitals.</p>
+                  ) : (
+                    <div className="mr-vitals-trends-list">
+                      {group.items.map((vital, index) => (
+                        <div className={`mr-trend-item ${statusText(vital.status)}`} key={`${group.key}-${vital.recordName}-${vital.name}-${index}`}>
+                          <div className="mr-trend-top">
+                            <span className="mr-trend-label">{vital.name}</span>
+                            <span className={`mr-trend-status ${statusText(vital.status)}`}>
+                              {displayStatus(vital.status)}
+                            </span>
+                          </div>
+                          <div className="mr-trend-middle">
+                            <span className={`mr-trend-value ${statusText(vital.status)}`}>
+                              {vital.value} {vital.unit || ""}
+                            </span>
+                            <span className="mr-trend-change">
+                              {vital.reference_range || vital.range || "No report range"}
+                            </span>
+                          </div>
+                          <div className="mr-sparkline-wrap">
+                            <span>{vital.recordDate || "Date not set"}</span>
+                            <div className="mr-spark-bar-container">
+                              <div className={`mr-spark-bar-fill ${statusText(vital.status)}`} style={{ width: "100%" }} />
+                            </div>
+                            <span>{vital.recordName}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* =============================================
@@ -654,7 +724,9 @@ export default function MedicalRecords() {
                                 </span>
                               </div>
                               <div className="mr-abnormal-values-row">
-                                <span className="mr-abnormal-current-val">Value: <b>{vital.value} {vital.unit || ""}</b></span>
+                                <span className={`mr-abnormal-current-val ${statusText(vital.status)}`}>
+                                  Value: <b className={vitalValueClass(vital.status)}>{vital.value} {vital.unit || ""}</b>
+                                </span>
                                 <span className="mr-abnormal-ref-val">Report Range: {vital.reference_range || vital.range}</span>
                               </div>
                               <small className="mr-source-trace">
@@ -796,7 +868,7 @@ export default function MedicalRecords() {
                               {group.vitals.map((vital, vitalIdx) => (
                                 <div key={vitalIdx} className="mr-finding-vital-row">
                                   <span className="mr-finding-vital-name">{vital.name}</span>
-                                  <span className="mr-finding-vital-val">{vital.value}</span>
+                                  <span className={`mr-finding-vital-val ${statusText(vital.status)}`}>{vital.value}</span>
                                   <span className="mr-finding-vital-range">Ref: {vital.range}</span>
                                   <span className={`mr-vitals-status-pill ${vital.status.toLowerCase()}`}>
                                     {vital.status}
@@ -865,7 +937,7 @@ export default function MedicalRecords() {
                           abnormalRecordVitals.map((v, i) => (
                             <tr key={i}>
                               <td style={{ fontWeight: 600 }}>{v.test_name || v.name}</td>
-                              <td>{v.value}</td>
+                              <td className={vitalValueClass(v.status)}>{v.value}</td>
                               <td>{v.unit || "-"}</td>
                               <td>
                                 <span style={{ color: "var(--text-muted)" }}>{v.reference_range || v.range || "-"} </span>
