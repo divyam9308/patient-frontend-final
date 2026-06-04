@@ -297,4 +297,19 @@ describe("analyzeLabReport range extraction", () => {
     expect(result.vitals.find(vital => vital.name === "LDL Cholesterol")).toBeUndefined();
     expect(result.vitals.find(vital => vital.name === "VLDL Cholesterol")).toBeUndefined();
   });
+
+  test("does not read CRP cardiovascular risk table thresholds as results", () => {
+    const report = [
+      "Interpretation",
+      "CARDIO CRP IN mg/L CARDIOVASCULAR RISK",
+      "<1 Low",
+      "1-3 Average",
+      "3-10 High",
+      ">10 Persistent elevation may represent non cardiovascular inflammation",
+    ].join("\n");
+
+    const result = analyzeLabReport(report);
+
+    expect(result.vitals.find(vital => vital.name === "CRP")).toBeUndefined();
+  });
 });

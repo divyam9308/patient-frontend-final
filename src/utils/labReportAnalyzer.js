@@ -560,6 +560,7 @@ const STOP_WORDS = new Set(["age", "date", "page", "id", "pin", "phone"]);
 const MAX_ANALYSIS_TEXT_LENGTH = 200000;
 const MAX_PDF_PARSE_BYTES = 10485760; // 10MB
 const MAX_OCR_PDF_PAGES = 8;
+const MAX_OCR_CANVAS_PIXELS = 2500000;
 const HBA1C_REFERENCE_RANGE_TEXT = "Diabetes >6.5%, Prediabetes 5.7-6.4%, Normal <5.7%";
 const CATEGORICAL_RANGE_LABELS = [
   "near to above optimal",
@@ -1017,8 +1018,11 @@ function isUnitPrefixedReferenceCandidate(tail, candidate, marker) {
   const beforeValue = normalizeUnitText(tail.slice(0, candidate.start));
   const expectedUnits = getExpectedUnits(marker);
   return expectedUnits.some(unit => {
-    const unitPattern = new RegExp(`${escapeRegExp(unit).replace(/\\ /g, "\\s*")}\\s*$`, "i");
-    return unitPattern.test(beforeValue);
+    const unitIndex = beforeValue.lastIndexOf(unit);
+    if (unitIndex < 0) return false;
+
+    const afterUnit = beforeValue.slice(unitIndex + unit.length);
+    return !/\d/.test(afterUnit) && afterUnit.length <= 80;
   });
 }
 
@@ -1942,17 +1946,17 @@ export function buildAnalysis(vitals, rawText) {
   };
 }
 
-function hasReferenceOnlyResultRows(text) {
-  const rows = extractLines(text).map(row => row.text);
+function getReferenceOnlyResultPages(text) {
+  const rows = extractLines(text);
   const unitTokens = getKnownUnitTokens();
   const thresholdPattern = /(?:^|[\s:])(?:<|<=|>|>=|less than|more than|above|upto|up to)\s*\d+(?:\.\d+)?/i;
 
-  return rows.some(row => {
-    const normalizedRow = normalizeUnitText(row);
+  return [...new Set(rows.filter(row => {
+    const normalizedRow = normalizeUnitText(row.text);
     const markerMatched = LAB_MARKERS.some(marker =>
-      marker.aliases.some(alias => new RegExp(rowAliasPattern(alias), "i").test(row))
+      marker.aliases.some(alias => new RegExp(rowAliasPattern(alias), "i").test(row.text))
     );
-    if (!markerMatched || !thresholdPattern.test(row)) return false;
+    if (!markerMatched || !thresholdPattern.test(row.text)) return false;
 
     const unitIndex = unitTokens
       .map(unit => normalizedRow.indexOf(unit))
@@ -1963,7 +1967,7 @@ function hasReferenceOnlyResultRows(text) {
     const beforeUnit = normalizedRow.slice(0, unitIndex);
     const afterUnit = normalizedRow.slice(unitIndex);
     return !/\d+(?:\.\d+)?/.test(beforeUnit) && thresholdPattern.test(afterUnit);
-  });
+  }).map(row => row.page).filter(Boolean))];
 }
 
 async function ocrImageSource(source, sourcePage = 1) {
@@ -1989,15 +1993,19 @@ async function ocrImageFile(file) {
   }
 }
 
-async function ocrPdfPages(pdf) {
+async function ocrPdfPages(pdf, pageNumbers = null) {
   if (typeof document === "undefined") return "";
 
   const pageTexts = [];
-  const pageLimit = Math.min(pdf.numPages, MAX_OCR_PDF_PAGES);
+  const pagesToOcr = Array.isArray(pageNumbers) && pageNumbers.length > 0
+    ? pageNumbers.filter(pageNum => pageNum >= 1 && pageNum <= pdf.numPages).slice(0, MAX_OCR_PDF_PAGES)
+    : Array.from({ length: Math.min(pdf.numPages, MAX_OCR_PDF_PAGES) }, (_, index) => index + 1);
 
-  for (let pageNum = 1; pageNum <= pageLimit; pageNum++) {
+  for (const pageNum of pagesToOcr) {
     const page = await pdf.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 2 });
+    const baseViewport = page.getViewport({ scale: 1 });
+    const maxScale = Math.sqrt(MAX_OCR_CANVAS_PIXELS / (baseViewport.width * baseViewport.height));
+    const viewport = page.getViewport({ scale: Math.max(1.25, Math.min(2, maxScale)) });
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d", { willReadFrequently: true });
     if (!context) continue;
@@ -2067,10 +2075,11 @@ export async function extractTextFromFile(file) {
       }
 
       const fullText = pageTexts.join("\n").trim();
-      if (fullText && !hasReferenceOnlyResultRows(fullText)) return fullText;
+      const suspiciousPages = getReferenceOnlyResultPages(fullText);
+      if (fullText && suspiciousPages.length === 0) return fullText;
 
-      const ocrText = await ocrPdfPages(pdf);
-      if (ocrText) return ocrText;
+      const ocrText = await ocrPdfPages(pdf, suspiciousPages);
+      if (ocrText) return [fullText, ocrText].filter(Boolean).join("\n").trim();
       if (fullText) return fullText;
     } catch (pdfJsError) {
       console.warn("pdf.js extraction failed, falling back to regex parser:", pdfJsError);
