@@ -250,9 +250,20 @@ export default function MedicalRecords() {
     return "borderline";
   };
 
-  const trendItems = records
-    .flatMap(record => (record.vitals || []).map(vital => ({ ...vital, recordName: record.name, recordDate: record.date })))
-    .filter(vital => vital.name && vital.value && vital.valid !== false);
+  const trendItemsMap = new Map();
+  [...records].reverse().forEach(record => {
+    (record.vitals || []).forEach(vital => {
+      if (vital.name && vital.value && vital.valid !== false) {
+        const key = vital.name.trim().toLowerCase();
+        trendItemsMap.set(key, {
+          ...vital,
+          recordName: record.name,
+          recordDate: record.date
+        });
+      }
+    });
+  });
+  const trendItems = Array.from(trendItemsMap.values());
   const groupedTrendItems = {
     normal: trendItems.filter(vital => trackerStatus(vital) === "normal"),
     borderline: trendItems.filter(vital => trackerStatus(vital) === "borderline"),
