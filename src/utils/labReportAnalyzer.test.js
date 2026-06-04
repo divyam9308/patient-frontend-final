@@ -1,6 +1,36 @@
-import { analyzeLabReport } from "./labReportAnalyzer";
+import { analyzeLabReport, extractReportMetadata } from "./labReportAnalyzer";
 
 describe("analyzeLabReport range extraction", () => {
+  test("extracts report metadata for upload prefilling", () => {
+    const report = [
+      "City Diagnostics Laboratory",
+      "Report Date: 14/05/2026",
+      "Referred By: Dr. Ramesh Kumar",
+      "LDL Cholesterol 128 mg/dL <100",
+    ].join("\n");
+
+    expect(extractReportMetadata(report)).toMatchObject({
+      reportDate: "2026-05-14",
+      doctor: "Dr. Ramesh Kumar",
+      facility: "City Diagnostics Laboratory",
+    });
+  });
+
+  test("returns report metadata from analyzeLabReport", () => {
+    const report = [
+      "HealthCare Labs",
+      "Reported: 02 Jun 2026",
+      "Doctor: Dr. Asha Mehta",
+      "Hemoglobin 13.5 12.0 - 16.0 g/dL",
+    ].join("\n");
+
+    expect(analyzeLabReport(report).metadata).toMatchObject({
+      reportDate: "2026-06-02",
+      doctor: "Dr. Asha Mehta",
+      facility: "HealthCare Labs",
+    });
+  });
+
   test("reads an adjacent numeric reference range after the result", () => {
     const report = "Hemoglobin 13.5 12.0 - 16.0 g/dL";
 

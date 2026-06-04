@@ -68,6 +68,18 @@ export default function MedicalRecords() {
     return result;
   };
 
+  const applyReportMetadata = (metadata = {}) => {
+    if (metadata.reportDate && !newDate) {
+      setNewDate(metadata.reportDate);
+    }
+    if (metadata.doctor && !newDoctor.trim()) {
+      setNewDoctor(metadata.doctor);
+    }
+    if (metadata.facility && !newFacility.trim()) {
+      setNewFacility(metadata.facility);
+    }
+  };
+
   const clearSelectedFile = () => {
     setSelectedFile(null);
     setReportText("");
@@ -94,6 +106,7 @@ export default function MedicalRecords() {
         const text = await extractTextFromFile(file);
         setReportText(text);
         const result = runAnalysisForText(text);
+        applyReportMetadata(result.metadata);
         if (!text.trim()) {
           setParseError("This file did not expose readable lab values. Add the important values manually below if it is a scanned image.");
         } else if (!result.vitals.length) {
@@ -147,6 +160,7 @@ export default function MedicalRecords() {
       size: selectedFile ? `${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB` : "1.1 MB",
       icon,
       color,
+      reportDate: newDate || reportResult.metadata?.reportDate || null,
       doctor: newDoctor || "Dr. Self Reported",
       facility: newFacility || "Personal Upload",
       notes: newNotes || (
@@ -160,7 +174,8 @@ export default function MedicalRecords() {
 
     try {
       const newRecord = await api.post('/medical-records', payload);
-      setRecords([newRecord, ...records]);
+      const refreshedRecords = await api.get('/medical-records').catch(() => null);
+      setRecords(Array.isArray(refreshedRecords) && refreshedRecords.length ? refreshedRecords : [newRecord, ...records]);
     } catch (err) {
       alert('Upload failed: ' + err.message);
     } finally {
@@ -585,11 +600,10 @@ export default function MedicalRecords() {
                     </div>
 
                     <div className="mr-form-field">
-                      <label className="mr-form-label">Document Date</label>
+                      <label className="mr-form-label">Report Date</label>
                       <input
                         type="date"
                         className="mr-form-input"
-                        required
                         value={newDate}
                         onChange={(e) => setNewDate(e.target.value)}
                       />

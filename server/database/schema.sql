@@ -54,12 +54,14 @@ CREATE TABLE IF NOT EXISTS medical_records (
   notes           TEXT,                 -- physician remarks
   vitals          JSONB DEFAULT '[]'::jsonb, -- parsed vitals list
   analysis        JSONB,                -- AI-assisted report interpretation
+  report_date     DATE,                 -- date printed on the medical report
   upload_date     TIMESTAMP DEFAULT NOW(),
   created_at      TIMESTAMP DEFAULT NOW()
 );
 
 ALTER TABLE medical_records
-  ADD COLUMN IF NOT EXISTS analysis JSONB;
+  ADD COLUMN IF NOT EXISTS analysis JSONB,
+  ADD COLUMN IF NOT EXISTS report_date DATE;
 
 -- ────────────────────────────────────────────────
 -- 4. MEDICATIONS TABLE (linked to MedicineVerification.js)

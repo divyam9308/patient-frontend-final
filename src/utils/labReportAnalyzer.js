@@ -581,6 +581,106 @@ function normalizeText(text) {
     .replace(/([a-zA-Z])(\d)/g, "$1 $2");
 }
 
+function cleanMetadataValue(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s:.-]+|[\s:.-]+$/g, "")
+    .trim();
+}
+
+function toIsoReportDate(day, month, year) {
+  const numericDay = Number(day);
+  const numericMonth = Number(month);
+  let numericYear = Number(year);
+
+  if (!numericDay || !numericMonth || !numericYear) return "";
+  if (numericYear < 100) numericYear += numericYear > 40 ? 1900 : 2000;
+  if (numericMonth < 1 || numericMonth > 12 || numericDay < 1 || numericDay > 31) return "";
+
+  const date = new Date(Date.UTC(numericYear, numericMonth - 1, numericDay));
+  if (
+    date.getUTCFullYear() !== numericYear
+    || date.getUTCMonth() !== numericMonth - 1
+    || date.getUTCDate() !== numericDay
+  ) {
+    return "";
+  }
+
+  return `${numericYear}-${String(numericMonth).padStart(2, "0")}-${String(numericDay).padStart(2, "0")}`;
+}
+
+function parseReportDate(text) {
+  const monthNames = {
+    jan: 1, january: 1,
+    feb: 2, february: 2,
+    mar: 3, march: 3,
+    apr: 4, april: 4,
+    may: 5,
+    jun: 6, june: 6,
+    jul: 7, july: 7,
+    aug: 8, august: 8,
+    sep: 9, sept: 9, september: 9,
+    oct: 10, october: 10,
+    nov: 11, november: 11,
+    dec: 12, december: 12,
+  };
+  const normalized = normalizeText(text);
+  const dateLabels = "(?:report(?:ed)?|report date|date of report|collection|collected|sample collected|sample date|received|result date|test date|date)";
+  const labeledNumeric = new RegExp(`${dateLabels}\\s*(?:date)?\\s*[:.-]?\\s*(\\d{1,2})[/-](\\d{1,2})[/-](\\d{2,4})`, "i");
+  const labeledIso = new RegExp(`${dateLabels}\\s*(?:date)?\\s*[:.-]?\\s*(\\d{4})[/-](\\d{1,2})[/-](\\d{1,2})`, "i");
+  const labeledTextMonth = new RegExp(`${dateLabels}\\s*(?:date)?\\s*[:.-]?\\s*(\\d{1,2})\\s+([A-Za-z]{3,9})\\s*,?\\s*(\\d{2,4})`, "i");
+
+  let match = normalized.match(labeledIso);
+  if (match) return toIsoReportDate(match[3], match[2], match[1]);
+
+  match = normalized.match(labeledNumeric);
+  if (match) return toIsoReportDate(match[1], match[2], match[3]);
+
+  match = normalized.match(labeledTextMonth);
+  if (match) return toIsoReportDate(match[1], monthNames[match[2].toLowerCase()], match[3]);
+
+  match = normalized.match(/\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b/);
+  if (match) return toIsoReportDate(match[1], match[2], match[3]);
+
+  match = normalized.match(/\b(\d{1,2})\s+([A-Za-z]{3,9})\s*,?\s*(\d{2,4})\b/i);
+  if (match) return toIsoReportDate(match[1], monthNames[match[2].toLowerCase()], match[3]);
+
+  return "";
+}
+
+function extractLabeledValue(lines, patterns) {
+  for (const line of lines) {
+    for (const pattern of patterns) {
+      const match = line.match(pattern);
+      const value = cleanMetadataValue(match?.[1]);
+      if (value) return value;
+    }
+  }
+
+  return "";
+}
+
+export function extractReportMetadata(rawText) {
+  const lines = extractLines(rawText).map(row => cleanMetadataValue(row.text)).filter(Boolean);
+  const firstLines = lines.slice(0, 12);
+  const doctor = extractLabeledValue(lines, [
+    /\b(?:doctor|physician|consultant|referred by|ref(?:\.|erred)? by|prescribed by)\b\s*[:.-]\s*(Dr\.?\s+[A-Za-z][A-Za-z .'-]{2,})/i,
+    /\b(Dr\.?\s+[A-Za-z][A-Za-z .'-]{2,})\b/i,
+  ]);
+  const facility = extractLabeledValue(lines, [
+    /\b(?:lab|laboratory|facility|hospital|clinic|diagnostic(?:s)?|centre|center)\b\s*[:.-]\s*([A-Za-z0-9][A-Za-z0-9 &.,'()-]{2,})/i,
+  ]) || firstLines.find(line =>
+    /\b(?:lab|labs|laboratory|diagnostic|diagnostics|pathology|hospital|clinic|medical centre|medical center|healthcare)\b/i.test(line)
+    && !/\b(?:patient|doctor|physician|date|sample|report|test name|results?)\b/i.test(line)
+  ) || "";
+
+  return {
+    reportDate: parseReportDate(rawText),
+    doctor: cleanMetadataValue(doctor),
+    facility: cleanMetadataValue(facility),
+  };
+}
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -1759,6 +1859,7 @@ export function analyzeLabReport(rawText) {
   return {
     extractedText: rawText || "",
     vitals,
+    metadata: extractReportMetadata(rawText),
     analysis: buildAnalysis(vitals.filter(vital => vital.valid), rawText),
   };
 }
