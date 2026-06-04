@@ -829,6 +829,262 @@
   transition: width 1s ease;
 }
 
+/* Notifications */
+.db-notif-wrap {
+  position: relative;
+}
+
+.db-bell-btn {
+  position: relative;
+}
+
+.db-notif-count {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  border: 2px solid #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 14px;
+  text-align: center;
+}
+
+.db-notif-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(360px, calc(100vw - 28px));
+  max-height: 440px;
+  background: #fff;
+  border: 1px solid #d4e8da;
+  border-radius: 10px;
+  box-shadow: 0 18px 50px rgba(15, 54, 33, 0.18);
+  z-index: 60;
+  overflow: hidden;
+}
+
+.db-notif-panel::before {
+  content: "";
+  position: absolute;
+  top: -7px;
+  right: 18px;
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  border-left: 1px solid #d4e8da;
+  border-top: 1px solid #d4e8da;
+  transform: rotate(45deg);
+}
+
+.db-notif-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #eaf4ec;
+  color: #123524;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.db-notif-head-btn {
+  border: 0;
+  background: transparent;
+  color: #2d6a3f;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.db-notif-list {
+  max-height: 330px;
+  overflow-y: auto;
+}
+
+.db-notif-empty {
+  padding: 28px 18px;
+  color: #7a9485;
+  font-size: 13px;
+  text-align: center;
+}
+
+.db-notif-item {
+  display: grid;
+  grid-template-columns: 34px 1fr 26px;
+  gap: 10px;
+  padding: 12px 12px;
+  border-bottom: 1px solid #f0f7f2;
+  background: #fff;
+}
+
+.db-notif-item.unread {
+  background: #f4fbf6;
+}
+
+.db-notif-item-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #e8f5ee;
+  color: #2d6a3f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.db-notif-item-title {
+  color: #123524;
+  font-size: 13px;
+  font-weight: 800;
+  margin-bottom: 3px;
+}
+
+.db-notif-item-text {
+  color: #4a6355;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.db-notif-item-time {
+  color: #9aaea2;
+  font-size: 11px;
+  margin-top: 5px;
+}
+
+.db-notif-remove,
+.db-toast-close {
+  border: 0;
+  background: transparent;
+  color: #7a9485;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 18px;
+  line-height: 20px;
+}
+
+.db-notif-remove:hover,
+.db-toast-close:hover {
+  background: #eaf4ec;
+  color: #123524;
+}
+
+.db-notif-clear-btn {
+  width: calc(100% - 24px);
+  margin: 10px 12px 12px;
+  border: 1.5px solid #d4e8da;
+  background: #f7fbf8;
+  color: #2d6a3f;
+  border-radius: 8px;
+  padding: 9px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.db-notif-clear-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.db-toast-stack {
+  position: fixed;
+  top: 76px;
+  right: 18px;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(360px, calc(100vw - 32px));
+}
+
+.db-toast {
+  display: grid;
+  grid-template-columns: 34px 1fr 26px;
+  gap: 10px;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #c8e6c9;
+  border-left: 4px solid #2d6a3f;
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(15, 54, 33, 0.16);
+  animation: db-toast-in 0.22s ease-out;
+}
+
+.db-toast-reminder,
+.db-toast-appointment {
+  border-left-color: #1d4ed8;
+}
+
+.db-toast-record {
+  border-left-color: #2d6a3f;
+}
+
+.db-toast-profile {
+  border-left-color: #7c3aed;
+}
+
+.db-toast-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #e8f5ee;
+  color: #2d6a3f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.db-toast-title {
+  color: #123524;
+  font-size: 13px;
+  font-weight: 800;
+  margin-bottom: 3px;
+}
+
+.db-toast-text {
+  color: #4a6355;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+@keyframes db-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .db-toast-stack {
+    top: 68px;
+    right: 10px;
+    left: 10px;
+    width: auto;
+  }
+
+  .db-notif-panel {
+    right: -72px;
+  }
+}
+
 /* ===================== EMERGENCY ALERTS TAB ===================== */
 .db-empty-state {
   padding: 32px 18px;

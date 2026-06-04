@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import { api } from "../utils/api.js";
 import { analyzeLabReport, extractTextFromFile } from "../utils/labReportAnalyzer.js";
+import { notifyRecordUploaded } from "../utils/notifications.js";
 import "./Dashboard.css";
 import "./MedicalRecords.css";
 
@@ -176,6 +177,7 @@ export default function MedicalRecords() {
       const newRecord = await api.post('/medical-records', payload);
       const refreshedRecords = await api.get('/medical-records').catch(() => null);
       setRecords(Array.isArray(refreshedRecords) && refreshedRecords.length ? refreshedRecords : [newRecord, ...records]);
+      notifyRecordUploaded({ title: payload.name, type: payload.type });
     } catch (err) {
       alert('Upload failed: ' + err.message);
     } finally {

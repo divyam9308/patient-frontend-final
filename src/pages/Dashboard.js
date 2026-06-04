@@ -7,6 +7,7 @@ import {
   acceptEmergencyAlert,
   declineEmergencyAlert,
 } from "../utils/api.js";
+import { notifyProfileUpdated, syncAppointmentReminders } from "../utils/notifications.js";
 import "./Dashboard.css";
 
 /* ─── Stat Card ─── */
@@ -36,7 +37,9 @@ function OverviewTab({ navigate }) {
     // Fetch dashboard summary (stats + upcoming appointments)
     api.get('/dashboard/summary').then(data => {
       setStats(data.stats);
-      setAppointments(data.upcomingAppointments || []);
+      const upcoming = data.upcomingAppointments || [];
+      setAppointments(upcoming);
+      syncAppointmentReminders(upcoming);
     }).catch(() => {});
 
     // Fetch medications for dashboard card
@@ -45,6 +48,12 @@ function OverviewTab({ navigate }) {
     // Fetch treatments for dashboard card
     api.get('/treatments').then(data => setTreatments(data.filter(t => t.status === 'ongoing').slice(0, 2))).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!appointments.length) return undefined;
+    const timer = window.setInterval(() => syncAppointmentReminders(appointments), 60000);
+    return () => window.clearInterval(timer);
+  }, [appointments]);
 
   const firstName = user?.name ? user.name.split(' ')[0] : 'there';
 
@@ -227,6 +236,7 @@ function ProfileTab() {
       localStorage.setItem('user', JSON.stringify(updated));
       setEditing(false);
       setSaveMsg('Profile updated!');
+      notifyProfileUpdated();
       setTimeout(() => setSaveMsg(''), 3000);
     } catch (err) {
       setSaveMsg('Error: ' + err.message);

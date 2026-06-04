@@ -11,6 +11,7 @@ import {
   createAppointment,
   getTriageRequest,
 } from "../utils/api.js";
+import { notifyAppointmentBooked, notifyAppointmentUpdated, syncAppointmentReminders } from "../utils/notifications.js";
 import "./Dashboard.css";
 import "./Appointment.css";
 
@@ -115,7 +116,9 @@ export default function Appointment() {
     setLoading(true);
     try {
       const data = await api.get("/appointments");
-      setAppointments(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      setAppointments(list);
+      syncAppointmentReminders(list);
     } catch {
       setAppointments([]);
     } finally {
@@ -142,6 +145,12 @@ export default function Appointment() {
     fetchAppointments();
     loadCities();
   }, [fetchAppointments, loadCities]);
+
+  useEffect(() => {
+    if (!appointments.length) return undefined;
+    const timer = window.setInterval(() => syncAppointmentReminders(appointments), 60000);
+    return () => window.clearInterval(timer);
+  }, [appointments]);
 
   useEffect(() => {
     if (incomingMode === "follow_up") return;
@@ -314,6 +323,10 @@ export default function Appointment() {
     try {
       await api.delete(`/appointments/${id}`);
       setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: "cancelled" } : a));
+      notifyAppointmentUpdated({
+        title: "Appointment cancelled",
+        message: "Your appointment was cancelled successfully.",
+      });
     } catch (err) {
       alert("Error: " + err.message);
     } finally {
@@ -325,6 +338,10 @@ export default function Appointment() {
     try {
       const updated = await api.put(`/appointments/${id}`, { status: newStatus });
       setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: updated.status } : a));
+      notifyAppointmentUpdated({
+        title: "Appointment status updated",
+        message: `Appointment marked as ${String(newStatus).replace("_", " ")}.`,
+      });
     } catch (err) {
       alert("Error updating status: " + err.message);
     }
@@ -353,6 +370,12 @@ export default function Appointment() {
         appointment_type: bookingMode,
         triage_id: activeTriageId || null,
         reason: reason || triage?.symptoms || null,
+      });
+      notifyAppointmentBooked({
+        date: selectedDate,
+        time: selectedTime,
+        doctor: selectedDoctor?.name,
+        type: bookingMode,
       });
       await fetchAppointments();
       closeModal();
