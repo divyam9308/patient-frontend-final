@@ -100,6 +100,47 @@ describe("analyzeLabReport range extraction", () => {
     });
   });
 
+  test("uses the reported lipid value instead of trailing categorical reference numbers", () => {
+    const report = [
+      "[[PAGE:3]]",
+      "Lipid Profile",
+      "Test Result Unit Biological Ref. Interval",
+      "Direct LDL H 100.39 mg/dL Optimal: <100",
+      "Direct measured",
+      "Near to above Optimal:",
+      "100 - 129",
+      "Borderline High: 130-159",
+      "High: 160 - 189",
+      "Very High: =190",
+      "Triglyceride H 168.0 mg/dL Normal : <150",
+      "Borderline : 150-199",
+      "High : 200-499",
+      "Very High : >500",
+    ].join("\n");
+
+    const result = analyzeLabReport(report);
+    const ldl = result.vitals.find(vital => vital.name === "LDL Cholesterol");
+    const triglycerides = result.vitals.find(vital => vital.name === "Triglycerides");
+
+    expect(ldl).toMatchObject({
+      value: "100.39",
+      numericValue: 100.39,
+      unit: "mg/dL",
+      status: "borderline",
+      valid: true,
+    });
+    expect(ldl.range).toContain("Optimal: <100");
+
+    expect(triglycerides).toMatchObject({
+      value: "168.0",
+      numericValue: 168,
+      unit: "mg/dL",
+      status: "borderline",
+      valid: true,
+    });
+    expect(triglycerides.range).toContain("Normal: <150");
+  });
+
   test("keeps mildly high values out of critical", () => {
     const report = [
       "WBC Count",

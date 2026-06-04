@@ -192,7 +192,7 @@ const LAB_MARKERS = [
   },
   {
     name: "LDL Cholesterol",
-    aliases: ["ldl", "ldl cholesterol"],
+    aliases: ["ldl", "ldl cholesterol", "direct ldl"],
     unit: "mg/dL",
     min: 0,
     max: 100,
@@ -208,7 +208,7 @@ const LAB_MARKERS = [
   },
   {
     name: "Triglycerides",
-    aliases: ["triglycerides", "tg"],
+    aliases: ["triglycerides", "triglyceride", "tg"],
     unit: "mg/dL",
     min: 0,
     max: 150,
@@ -987,6 +987,11 @@ function isInsideRanges(index, ranges) {
   return ranges.some(range => index >= range.start && index < range.end);
 }
 
+function getMatchNumericStart(match) {
+  const raw = match?.[0] || "";
+  return (match?.index || 0) + raw.length - raw.trimStart().length;
+}
+
 function startsWithReferenceRangeText(text) {
   const normalizedText = String(text || "").replace(/\s+/g, " ").trim();
   return /^-?\d+(?:\.\d+)?\s*(?:-|to|\u2013|\u2014|â€“|â€”|Ã¢â‚¬â€œ|Ã¢â‚¬â€)\s*-?\d+(?:\.\d+)?/i.test(normalizedText)
@@ -1022,7 +1027,7 @@ function getResultCandidates(tail, ranges) {
 
   const numberPattern = /([<>]?)\s*(-?\d+(?:\.\d+)?)/g;
   const unfiltered = [...tail.matchAll(numberPattern)]
-    .filter(match => !isInsideRanges(match.index || 0, ranges))
+    .filter(match => !isInsideRanges(getMatchNumericStart(match), ranges))
     .filter(match => !isDescriptorNumber(tail, match))
     .map(match => ({
       prefix: match[1] || "",
@@ -1044,22 +1049,11 @@ function getResultCandidates(tail, ranges) {
 
 function getTrailingResultCandidate(tail, ranges) {
   const candidates = getResultCandidates(tail, ranges);
-  if (candidates.length <= 1) return candidates[0] || null;
+  if (candidates[0]?.prefix && candidates[1]?.value === candidates[0].value) {
+    return candidates[1];
+  }
 
-  const normalizedTail = normalizeUnitText(tail);
-  const knownUnits = getKnownUnitTokens();
-  const hasUnitBeforeRange = ranges.some(range => {
-    const beforeRange = normalizedTail.slice(0, range.start);
-    return knownUnits.some(unit => beforeRange.includes(unit));
-  });
-  const firstCandidate = candidates[0];
-  const hasUnitBeforeFirstCandidate = knownUnits.some(unit =>
-    normalizedTail.slice(0, firstCandidate.start).includes(unit)
-  );
-
-  return (hasUnitBeforeRange || (hasUnitBeforeFirstCandidate && firstCandidate.prefix))
-    ? candidates[candidates.length - 1]
-    : candidates[0];
+  return candidates[0] || null;
 }
 
 function startsWithResultValue(tail) {
@@ -1153,6 +1147,18 @@ function extractUnitAfterValue(tail, candidate, marker) {
     .replace(/^(critical|crit|panic|hh|ll|high|low|h|l)(?=$|[\s|,;:)])\s*/i, "");
   const expectedUnits = getExpectedUnits(marker);
 
+  for (const expected of expectedUnits) {
+    const pattern = new RegExp(`^${escapeRegExp(expected).replace(/\\ /g, "\\s*")}(?=$|[\\s|,;:)\\-])`, "i");
+    const match = normalizeUnitText(afterValue).match(pattern);
+    if (match) {
+      return {
+        unit: marker.unit,
+        rawUnit: afterValue.slice(0, match[0].length).trim(),
+        valid: true,
+      };
+    }
+  }
+
   if (/^(?:reference|normal|range|ref|interval|bio\.?\s*ref\.?)(?=$|[\s:])/i.test(afterValue)) {
     return {
       unit: "",
@@ -1167,18 +1173,6 @@ function extractUnitAfterValue(tail, candidate, marker) {
       rawUnit: "",
       valid: false,
     };
-  }
-
-  for (const expected of expectedUnits) {
-    const pattern = new RegExp(`^${escapeRegExp(expected).replace(/\\ /g, "\\s*")}(?=$|[\\s|,;:)\\-])`, "i");
-    const match = normalizeUnitText(afterValue).match(pattern);
-    if (match) {
-      return {
-        unit: marker.unit,
-        rawUnit: afterValue.slice(0, match[0].length).trim(),
-        valid: true,
-      };
-    }
   }
 
   const rawMatch = afterValue.match(/^([A-Za-zµμ%/.\d^+-]{1,20})/);
