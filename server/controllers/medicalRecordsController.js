@@ -3,14 +3,6 @@
 
 import supabase from '../config/supabaseClient.js';
 
-function isMissingAnalysisColumn(error) {
-  return String(error?.message || '').toLowerCase().includes('analysis');
-}
-
-function isMissingReportDateColumn(error) {
-  return String(error?.message || '').toLowerCase().includes('report_date');
-}
-
 function formatRecordDate(record) {
   const dateObj = new Date(record.report_date || record.upload_date);
   if (Number.isNaN(dateObj.getTime())) return '';
@@ -142,25 +134,37 @@ export const uploadMedicalRecord = async (req, res) => {
       report_date: reportDate || null,
     };
 
-    let { data: newRecord, error } = await supabase
-      .from('medical_records')
-      .insert(baseInsert)
-      .select()
-      .single();
+    let insertObj = { ...baseInsert };
+    let newRecord = null;
+    let error = null;
+    let attempts = 0;
+    const maxAttempts = 5;
 
-    if (error && (isMissingAnalysisColumn(error) || isMissingReportDateColumn(error))) {
-      const fallbackInsert = { ...baseInsert };
-      if (isMissingAnalysisColumn(error)) delete fallbackInsert.analysis;
-      if (isMissingReportDateColumn(error)) delete fallbackInsert.report_date;
-
-      const fallback = await supabase
+    while (attempts < maxAttempts) {
+      const result = await supabase
         .from('medical_records')
-        .insert(fallbackInsert)
+        .insert(insertObj)
         .select()
         .single();
 
-      newRecord = fallback.data;
-      error = fallback.error;
+      if (!result.error) {
+        newRecord = result.data;
+        error = null;
+        break;
+      }
+
+      error = result.error;
+      const errMsg = String(error.message || '');
+      const missingColumnMatch = errMsg.match(/Could not find the '([^']+)' column/i);
+
+      if (missingColumnMatch) {
+        const columnName = missingColumnMatch[1];
+        console.warn(`Database schema is missing column '${columnName}'. Retrying without it.`);
+        delete insertObj[columnName];
+        attempts++;
+      } else {
+        break; // Other error, exit loop
+      }
     }
 
     if (error) {
