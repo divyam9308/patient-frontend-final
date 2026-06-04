@@ -743,7 +743,7 @@ function isIgnoredNarrativeLine(line) {
 
 function getReferenceRangeMatches(tail) {
   const ranges = [];
-  const rangePattern = /(?:reference|normal|range|ref|interval|bio\.?\s*ref\.?)?\s*:?\s*(-?\d+(?:\.\d+)?)\s*(?:-|to|\u2013|\u2014|â€“|â€”)\s*(-?\d+(?:\.\d+)?)/gi;
+  const rangePattern = /(?:reference|normal|range|ref|interval|bio\.?\s*ref\.?|borderline|very\s*high|high|low|desirable|optimal|critical|expected|acceptable|limits?|standard)?\s*:?\s*(-?\d+(?:\.\d+)?)\s*(?:-|to|\u2013|\u2014|â€“|â€”)\s*(-?\d+(?:\.\d+)?)/gi;
   let rangeMatch;
 
   while ((rangeMatch = rangePattern.exec(tail)) !== null) {
@@ -760,7 +760,7 @@ function getReferenceRangeMatches(tail) {
     });
   }
 
-  const upperPattern = /(?:reference|normal|range|ref|interval|bio\.?\s*ref\.?)\s*:?\s*(?:<|<=|less than|upto|up to)\s*(-?\d+(?:\.\d+)?)/gi;
+  const upperPattern = /(?:reference|normal|range|ref|interval|bio\.?\s*ref\.?|borderline|very\s*high|high|low|desirable|optimal|critical|expected|acceptable|limits?|standard)\s*:?\s*(?:<|<=|less than|upto|up to)\s*(-?\d+(?:\.\d+)?)/gi;
   let upperMatch;
 
   while ((upperMatch = upperPattern.exec(tail)) !== null) {
@@ -773,7 +773,7 @@ function getReferenceRangeMatches(tail) {
     });
   }
 
-  const lowerPattern = /(?:reference|normal|range|ref|interval|bio\.?\s*ref\.?)\s*:?\s*(?:>|>=|more than|above)\s*(-?\d+(?:\.\d+)?)/gi;
+  const lowerPattern = /(?:reference|normal|range|ref|interval|bio\.?\s*ref\.?|borderline|very\s*high|high|low|desirable|optimal|critical|expected|acceptable|limits?|standard)\s*:?\s*(?:>|>=|more than|above)\s*(-?\d+(?:\.\d+)?)/gi;
   let lowerMatch;
 
   while ((lowerMatch = lowerPattern.exec(tail)) !== null) {
@@ -834,7 +834,7 @@ function parseReferenceFromTail(tail) {
     };
   }
 
-  const rangeMatch = tail.match(/(?:reference|normal|range|ref)?\s*:?\s*(-?\d+(?:\.\d+)?)\s*(?:-|to|–|—)\s*(-?\d+(?:\.\d+)?)/i);
+  const rangeMatch = tail.match(/(?:reference|normal|range|ref|interval|bio\.?\s*ref\.?|borderline|very\s*high|high|low|desirable|optimal|critical|expected|acceptable|limits?|standard)?\s*:?\s*(-?\d+(?:\.\d+)?)\s*(?:-|to|–|—)\s*(-?\d+(?:\.\d+)?)/i);
   if (rangeMatch) {
     const min = Number(rangeMatch[1]);
     const max = Number(rangeMatch[2]);
@@ -847,7 +847,7 @@ function parseReferenceFromTail(tail) {
     };
   }
 
-  const upperMatch = tail.match(/(?:reference|normal|range|ref)\s*:?\s*(?:<|<=|less than|upto|up to)\s*(-?\d+(?:\.\d+)?)/i);
+  const upperMatch = tail.match(/(?:reference|normal|range|ref|interval|bio\.?\s*ref\.?|borderline|very\s*high|high|low|desirable|optimal|critical|expected|acceptable|limits?|standard)\s*:?\s*(?:<|<=|less than|upto|up to)\s*(-?\d+(?:\.\d+)?)/i);
   if (upperMatch) {
     return {
       min: null,
@@ -856,7 +856,7 @@ function parseReferenceFromTail(tail) {
     };
   }
 
-  const lowerMatch = tail.match(/(?:reference|normal|range|ref)\s*:?\s*(?:>|>=|more than|above)\s*(-?\d+(?:\.\d+)?)/i);
+  const lowerMatch = tail.match(/(?:reference|normal|range|ref|interval|bio\.?\s*ref\.?|borderline|very\s*high|high|low|desirable|optimal|critical|expected|acceptable|limits?|standard)\s*:?\s*(?:>|>=|more than|above)\s*(-?\d+(?:\.\d+)?)/i);
   if (lowerMatch) {
     return {
       min: Number(lowerMatch[1]),
@@ -1021,7 +1021,7 @@ function getResultCandidates(tail, ranges) {
   }
 
   const numberPattern = /([<>]?)\s*(-?\d+(?:\.\d+)?)/g;
-  return [...tail.matchAll(numberPattern)]
+  const unfiltered = [...tail.matchAll(numberPattern)]
     .filter(match => !isInsideRanges(match.index || 0, ranges))
     .filter(match => !isDescriptorNumber(tail, match))
     .map(match => ({
@@ -1031,6 +1031,15 @@ function getResultCandidates(tail, ranges) {
       start: match.index || 0,
       end: (match.index || 0) + match[0].length,
     }));
+
+  const filtered = unfiltered.filter(candidate => {
+    const start = candidate.start;
+    const before = tail.slice(Math.max(0, start - 25), start).toLowerCase();
+    const hasRangeKeywordBefore = /\b(normal|reference|range|ref|interval|borderline|desirable|optimal|expected|limit|limits|standard|high|low|critical|panic)\b/i.test(before);
+    return !hasRangeKeywordBefore;
+  });
+
+  return filtered.length > 0 ? filtered : unfiltered;
 }
 
 function getTrailingResultCandidate(tail, ranges) {
