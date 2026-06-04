@@ -278,4 +278,23 @@ describe("analyzeLabReport range extraction", () => {
       valid: true,
     });
   });
+
+  test("does not treat unit-prefixed less-than ranges as lipid results", () => {
+    const report = [
+      "LIPID PROFILE, BASIC, SERUM",
+      "Cholesterol Total mg/dL <200",
+      "Triglycerides mg/dL <150",
+      "HDL Cholesterol mg/dL >40",
+      "LDL Cholesterol,Direct mg/dL <100",
+      "VLDL Cholesterol mg/dL <30",
+    ].join("\n");
+
+    const result = analyzeLabReport(report);
+
+    expect(result.vitals.find(vital => vital.name === "Total Cholesterol")).toBeUndefined();
+    expect(result.vitals.find(vital => vital.name === "Triglycerides")).toBeUndefined();
+    expect(result.vitals.find(vital => vital.name === "HDL Cholesterol")).toBeUndefined();
+    expect(result.vitals.find(vital => vital.name === "LDL Cholesterol")).toBeUndefined();
+    expect(result.vitals.find(vital => vital.name === "VLDL Cholesterol")).toBeUndefined();
+  });
 });

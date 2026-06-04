@@ -1011,7 +1011,18 @@ function isDescriptorNumber(tail, numberMatch) {
     || before.endsWith("10^");
 }
 
-function getResultCandidates(tail, ranges) {
+function isUnitPrefixedReferenceCandidate(tail, candidate, marker) {
+  if (!candidate?.prefix) return false;
+
+  const beforeValue = normalizeUnitText(tail.slice(0, candidate.start));
+  const expectedUnits = getExpectedUnits(marker);
+  return expectedUnits.some(unit => {
+    const unitPattern = new RegExp(`${escapeRegExp(unit).replace(/\\ /g, "\\s*")}\\s*$`, "i");
+    return unitPattern.test(beforeValue);
+  });
+}
+
+function getResultCandidates(tail, ranges, marker) {
   const preferredPattern = /(?:result|observed|value|reading|level)\s*[:=-]?\s*([<>]?)\s*(-?\d+(?:\.\d+)?)/i;
   const preferred = tail.match(preferredPattern);
 
@@ -1037,18 +1048,21 @@ function getResultCandidates(tail, ranges) {
       end: (match.index || 0) + match[0].length,
     }));
 
-  const filtered = unfiltered.filter(candidate => {
+  const withoutUnitPrefixedReferences = unfiltered
+    .filter(candidate => !isUnitPrefixedReferenceCandidate(tail, candidate, marker));
+
+  const filtered = withoutUnitPrefixedReferences.filter(candidate => {
     const start = candidate.start;
     const before = tail.slice(Math.max(0, start - 25), start).toLowerCase();
     const hasRangeKeywordBefore = /\b(normal|reference|range|ref|interval|borderline|desirable|optimal|expected|limit|limits|standard|high|low|critical|panic)\b/i.test(before);
     return !hasRangeKeywordBefore;
   });
 
-  return filtered.length > 0 ? filtered : unfiltered;
+  return filtered.length > 0 ? filtered : withoutUnitPrefixedReferences;
 }
 
-function getTrailingResultCandidate(tail, ranges) {
-  const candidates = getResultCandidates(tail, ranges);
+function getTrailingResultCandidate(tail, ranges, marker) {
+  const candidates = getResultCandidates(tail, ranges, marker);
   if (candidates[0]?.prefix && candidates[1]?.value === candidates[0].value) {
     return candidates[1];
   }
@@ -1376,7 +1390,7 @@ function extractNumberAfterAlias(matchObj, alias, marker, lines) {
   let reportRange = isHbA1c
     ? getHbA1cReferenceRange()
     : (unitPrefixedRange || parseCategoricalReferenceFromTail(tail) || parseReferenceFromTail(tail));
-  let candidates = getResultCandidates(tail, ranges);
+  let candidates = getResultCandidates(tail, ranges, marker);
 
   if (candidates.length === 0 && !nearbyResultTail) {
     const fallbackTail = findNearbyStandaloneResultTail(lines, index, marker);
@@ -1390,7 +1404,7 @@ function extractNumberAfterAlias(matchObj, alias, marker, lines) {
       reportRange = isHbA1c
         ? getHbA1cReferenceRange()
         : (fallbackUnitPrefixedRange || parseCategoricalReferenceFromTail(tail) || parseReferenceFromTail(tail));
-      candidates = getResultCandidates(tail, ranges);
+      candidates = getResultCandidates(tail, ranges, marker);
     }
   }
 
@@ -1405,7 +1419,7 @@ function extractNumberAfterAlias(matchObj, alias, marker, lines) {
     };
   }
 
-  const result = getTrailingResultCandidate(tail, ranges) || candidates[0];
+  const result = getTrailingResultCandidate(tail, ranges, marker) || candidates[0];
   let unit = extractUnitAfterValue(tail, result, marker);
   if (!unit.valid) {
     const leadingUnit = extractUnitBeforeValue(tail, result, marker);
@@ -1928,6 +1942,30 @@ export function buildAnalysis(vitals, rawText) {
   };
 }
 
+function hasReferenceOnlyResultRows(text) {
+  const rows = extractLines(text).map(row => row.text);
+  const unitTokens = getKnownUnitTokens();
+  const thresholdPattern = /(?:^|[\s:])(?:<|<=|>|>=|less than|more than|above|upto|up to)\s*\d+(?:\.\d+)?/i;
+
+  return rows.some(row => {
+    const normalizedRow = normalizeUnitText(row);
+    const markerMatched = LAB_MARKERS.some(marker =>
+      marker.aliases.some(alias => new RegExp(rowAliasPattern(alias), "i").test(row))
+    );
+    if (!markerMatched || !thresholdPattern.test(row)) return false;
+
+    const unitIndex = unitTokens
+      .map(unit => normalizedRow.indexOf(unit))
+      .filter(index => index >= 0)
+      .sort((a, b) => a - b)[0];
+    if (typeof unitIndex !== "number") return false;
+
+    const beforeUnit = normalizedRow.slice(0, unitIndex);
+    const afterUnit = normalizedRow.slice(unitIndex);
+    return !/\d+(?:\.\d+)?/.test(beforeUnit) && thresholdPattern.test(afterUnit);
+  });
+}
+
 async function ocrImageSource(source, sourcePage = 1) {
   if (typeof window === "undefined") return "";
 
@@ -1987,7 +2025,7 @@ export async function extractTextFromFile(file) {
     return text.trim() ? `[[PAGE:1]]\n${text}` : "";
   }
 
-  if (["png", "jpg", "jpeg", "webp", "heic"].includes(extension) || file.type.startsWith("image/")) {
+  if (["png", "jpg", "jpeg", "webp", "heic", "bmp", "gif", "tif", "tiff", "avif"].includes(extension) || file.type.startsWith("image/")) {
     return ocrImageFile(file);
   }
 
@@ -2029,10 +2067,11 @@ export async function extractTextFromFile(file) {
       }
 
       const fullText = pageTexts.join("\n").trim();
-      if (fullText) return fullText;
+      if (fullText && !hasReferenceOnlyResultRows(fullText)) return fullText;
 
       const ocrText = await ocrPdfPages(pdf);
       if (ocrText) return ocrText;
+      if (fullText) return fullText;
     } catch (pdfJsError) {
       console.warn("pdf.js extraction failed, falling back to regex parser:", pdfJsError);
     }
